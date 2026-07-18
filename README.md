@@ -1,203 +1,50 @@
 # Location Gateway
 
-A Spring Boot REST API for UK location and postcode lookups, built with Java 17 and Spring Boot 3.2.0.
+Spring Boot facade that currently maps a UK postcode/outcode through
+postcode-io-gateway into the client location response.
 
-## Features
+> Beta status: not beta-ready. The generated postcode client is not
+> reproducible and the advertised general search endpoint is absent. See
+> [the audit](docs/BETA_READINESS_AUDIT.md).
 
-- **Location Search**: Search for UK locations by query string
-- **Postcode Lookup**: Retrieve location details from UK postcodes using the Postcode.io API
-- **Reactive Support**: Built with Spring WebFlux for asynchronous operations
-- **Health Monitoring**: Spring Boot Actuator endpoints included
+## Requirements and configuration
 
-## Technology Stack
+- Java 17 and Maven 3.9
+- postcode-io-gateway
 
-- **Java 17**
-- **Spring Boot 3.2.0**
-- **Spring Web MVC** - REST API endpoints
-- **Spring WebFlux** - Reactive programming support
-- **Spring Boot Actuator** - Health and monitoring endpoints
-- **Lombok** - Boilerplate code reduction
-- **Maven** - Build and dependency management
+| Variable | Local default | Purpose |
+|---|---|---|
+| `SERVER_PORT` | `8081` | HTTP port |
+| `POSTCODE_IO_GATEWAY_URL` | `http://localhost:8082` | Postcode gateway |
+| `APP_LOG_LEVEL` | `INFO` | Application log level |
 
-## API Endpoints
+## API, health and build
 
-### Search Locations
-```
-GET /api/locations?q={query}
-```
-Search for UK locations by name or partial match.
+- `GET /api/postcodes/{postcode}`
+- `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
 
-**Example:**
-```bash
-curl "http://localhost:8080/api/locations?q=London"
-```
-
-**Response:**
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Retrieved 5 matching UK locations.",
-  "data": [
-    {
-      "name": "London",
-      "region": "London",
-      "country": "England"
-    }
-  ]
-}
-```
-
-### Get Location by Postcode
-```
-GET /api/postcodes/{postcode}
-```
-Retrieve location details for a specific UK postcode using the Postcode.io API.
-
-**Example:**
-```bash
-curl "http://localhost:8080/api/postcodes/SW1A1AA"
-```
-
-**Response:**
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Retrieved location for postcode SW1A1AA.",
-  "data": [
-    {
-      "postcode": "SW1A 1AA",
-      "latitude": 51.5035,
-      "longitude": -0.1277,
-      "region": "London",
-      "country": "England"
-    }
-  ]
-}
-```
-
-## Building the Project
-
-### Prerequisites
-
-- Java 17 or higher
-- Maven 3.6+
-
-### Build Commands
+`GET /api/locations?q=` is not implemented; LOC-02 owns that decision.
 
 ```bash
-# Clean and compile
-mvn clean compile
-
-# Run tests
-mvn test
-
-# Package the application
-mvn clean package
-
-# Run the application
+mvn -B verify
 mvn spring-boot:run
-```
-
-## Running the Application
-
-The application will start on `http://localhost:8080` by default.
-
-### Configuration
-
-Application properties can be configured in `src/main/resources/application.properties`.
-
-## Project Structure
-
-```
-location-gateway/
-├── src/
-│   ├── main/
-│   │   ├── java/com/jobseekercopilot/locationgateway/
-│   │   │   ├── LocationGatewayApplication.java
-│   │   │   ├── client/
-│   │   │   │   └── PostcodeIoClient.java
-│   │   │   ├── controller/
-│   │   │   │   └── LocationController.java
-│   │   │   ├── model/
-│   │   │   │   ├── Location.java
-│   │   │   │   └── LocationResponse.java
-│   │   │   └── service/
-│   │   │       └── LocationService.java
-│   │   └── resources/
-│   │       └── application.properties
-│   └── test/
-│       └── java/com/jobseekercopilot/locationgateway/
-│           ├── LocationControllerIntegrationTest.java
-│           └── service/
-│               └── LocationServiceTest.java
-├── pom.xml
-├── Dockerfile
-└── README.md
-```
-
-## Testing
-
-The project includes both unit and integration tests:
-
-- **LocationServiceTest**: Unit tests for the location service layer
-- **LocationControllerIntegrationTest**: Integration tests for the REST API endpoints
-
-Run tests with:
-```bash
-mvn test
-```
-
-## Docker
-
-A Dockerfile is included for containerized deployment.
-
-```bash
-# Build Docker image
 docker build -t location-gateway .
-
-# Run container
-docker run -p 8080:8080 location-gateway
 ```
 
-## API Response Format
+The clean build fails until LOC-01 replaces the local generated JAR. Do not
+commit that binary.
 
-All API responses follow a consistent structure:
+## Branch workflow and troubleshooting
 
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Description of the result",
-  "data": [...]
-}
-```
+Use `feature/* → develop`; `main` will be introduced later. A 5xx postcode
+response currently conflates invalid input and provider failure; follow the
+correlation ID and the paired postcode gateway logs without recording postcode
+PII unnecessarily.
 
-- `status`: HTTP status code
-- `success`: Boolean indicating success/failure
-- `message`: Human-readable message
-- `data`: Response payload (array or object)
+## Licence
 
-## Error Handling
+Copyright © 2026 Bernard McGeever. All rights reserved.
 
-The API returns appropriate HTTP status codes and error messages:
-
-- `400 Bad Request`: Missing or invalid parameters
-- `500 Internal Server Error`: Server-side errors
-
-## License
-
-This project is part of the Job Seeker Copilot suite.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## Repository
-
-https://github.com/mcgeeverbernard1992/location-gateway
+This repository contains proprietary software belonging to Bernard McGeever.
+It may not be used, copied, modified or distributed without express written
+permission. See [LICENSE](./LICENSE).
