@@ -2,9 +2,10 @@
 
 Audit date: 18 July 2026
 
-Status: **Not beta-ready.** Current-tree `mvn -B verify` passed four tests only
-with an untracked generated client JAR. The UI-advertised general search route
-does not exist.
+Status: **Not beta-ready.** LOC-01 now generates the postcode client from a
+versioned consumer contract and clean builds no longer require an untracked
+JAR. The UI-advertised general search route does not exist, and the remaining
+validation, resilience, testing and operational findings still block beta.
 
 ## Findings
 
@@ -16,5 +17,22 @@ does not exist.
 | [LOC-04](https://github.com/jobseekercopilot/location-gateway/issues/4) | Bound the synchronous provider call | Generated client has no configured timeouts, retry budget or circuit breaker. | **High / P1 reliability:** slow postcode service can exhaust request threads. | Configure connect/read deadlines, safe retries/backoff/circuit break and fallback; add readiness and slow/outage tests. | LOC-01 and postcode SLO. | Yes | M |
 | [LOC-05](https://github.com/jobseekercopilot/location-gateway/issues/5) | Add cache/rate controls and operational signals | No cache, caller rate limit, provider latency/error metric or alert requirement exists. | **Medium / P2 reliability/observability:** duplicate calls waste provider capacity and outages are invisible. | Define cache key/TTL/privacy, rate limit, metrics and beta alerts; test cache and throttling. | Monitoring approach. | No | M |
 | [LOC-06](https://github.com/jobseekercopilot/location-gateway/issues/6) | Add meaningful contract/integration testing | Four tests cover a happy service mapping, controller shape and OpenAPI; no invalid/outage/rate/timeout/contract tests exist. | **High / P1 testing:** resilience/error semantics are unproven. | Add contract plus provider-stub integration tests for full postcode and all negative scenarios; include browser E2E. | LOC-01–05. | Yes | M |
-| [LOC-07](https://github.com/jobseekercopilot/location-gateway/issues/7) | Harden container, readiness and docs | Docker skips tests, copies `libs`, runs root/mutable images; health details are always exposed; README documents nonexistent route/port. | **Medium / P1 operational/docs:** image and runbook encode incorrect assumptions. | Pin/non-root/scan image, run verify, add dependency readiness/graceful shutdown, correct API/config/branch/licence docs. | LOC-01/02. | Yes | M |
+| [LOC-07](https://github.com/jobseekercopilot/location-gateway/issues/7) | Harden container, readiness and docs | Docker skips tests and runs root/mutable images; health details are always exposed and no downstream readiness is defined. | **Medium / P1 operational/docs:** the image and runbook remain unsafe and incomplete for beta operation. | Pin/non-root/scan image, run verify, add dependency readiness/graceful shutdown, and document actual operations. | LOC-01/02. | Yes | M |
 | [LOC-08](https://github.com/jobseekercopilot/location-gateway/issues/8) | Establish reliable dependency vulnerability scanning | CI emits `mvn dependency:tree` but performs no vulnerability analysis; no dependable advisory-feed cache or risk-acceptance workflow is configured. | **High / P1 dependency:** vulnerable gateway or HTTP libraries can reach beta without a reliable blocking signal. | Select a proprietary-compatible Maven scanner, configure authenticated/cached advisory data, publish a machine-readable report, fail on unaccepted Critical/High findings and document the risk-acceptance process. | Platform CI and advisory-feed decision. | Yes | M |
+
+## LOC-01 remediation evidence
+
+- `systemPath`, the ignored client JAR dependency and Docker `libs` copy are
+  removed.
+- The owned postcode consumer contract is versioned under `src/main/openapi`
+  and records the reviewed provider repository revision.
+- OpenAPI Generator 7.5.0 is pinned and emits the RestTemplate client beneath
+  `target/generated-sources`; generated sources and binaries remain ignored.
+- Contract tests prove the generated request path, JSON field mapping and
+  required postcode parameter behavior.
+- Clean-clone Maven, Docker, dependency inventory, paired gateway journey and
+  complete-history secret-scan evidence is recorded in LOC-01 and its pull
+  request.
+
+This resolves LOC-01 only. LOC-02 through LOC-08 remain open, so the service is
+still **not beta-ready**.

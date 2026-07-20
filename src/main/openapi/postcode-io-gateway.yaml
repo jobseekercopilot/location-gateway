@@ -1,0 +1,63 @@
+openapi: 3.0.1
+info:
+  title: Jobseeker Copilot - Postcode.io Gateway API
+  version: 1.0.0
+  description: Consumer contract used by location-gateway.
+x-source-repository: jobseekercopilot/postcode-io-gateway
+x-source-revision: 4f41069d72fe167427e75cd7bf6564e812ce4b2c
+paths:
+  /api/postcodes/{postcode}:
+    get:
+      tags: [Postcode]
+      operationId: getLocationByPostcode
+      parameters:
+        - name: postcode
+          in: path
+          required: true
+          description: UK postcode or outcode
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Postcode location found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostcodeLocation'
+        '500':
+          description: Postcode provider or lookup failure
+components:
+  schemas:
+    PostcodeLocation:
+      type: object
+      properties:
+        postcode:
+          type: string
+        country:
+          type: string
+        region:
+          type: string
+        parliamentary_constituency:
+          type: string
+        eastings:
+          type: string
+        northings:
+          type: string
+        longitude:
+          type: number
+          format: double
+        latitude:
+          type: number
+          format: double
+        european_electoral_region:
+          type: string
+        primary_care_trust:
+          type: string
+        nhs_ha:
+          type: string
+        admin_county:
+          type: string
+        admin_district:
+          type: string
+        admin_ward:
+          type: string

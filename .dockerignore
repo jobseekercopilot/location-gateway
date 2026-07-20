@@ -1,10 +1,16 @@
 target/
+libs/
 *.jar
 *.class
+*.log
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 .mvn/
 mvnw
 mvnw.cmd
+.git/
+.github/
+.idea/
+.vscode/
 .DS_Store

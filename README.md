@@ -3,8 +3,8 @@
 Spring Boot facade that currently maps a UK postcode/outcode through
 postcode-io-gateway into the client location response.
 
-> Beta status: not beta-ready. The generated postcode client is not
-> reproducible and the advertised general search endpoint is absent. See
+> Beta status: not beta-ready. The advertised general search endpoint is
+> absent and resilience, validation and operational blockers remain. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 ## Requirements and configuration
@@ -26,20 +26,25 @@ postcode-io-gateway into the client location response.
 `GET /api/locations?q=` is not implemented; LOC-02 owns that decision.
 
 ```bash
-mvn -B verify
+mvn -B clean verify
 mvn spring-boot:run
 docker build -t location-gateway .
 ```
 
-The clean build fails until LOC-01 replaces the local generated JAR. Do not
-commit that binary.
+Maven generates the postcode RestTemplate client from the versioned consumer
+contract at `src/main/openapi/postcode-io-gateway.yaml`. OpenAPI Generator 7.5.0
+is pinned, output stays under `target/generated-sources`, and neither a sibling
+checkout nor `libs/*.jar` is required. See the
+[contract update procedure](src/main/openapi/README.md) before changing the
+provider API. Do not commit generated Java or client binaries.
 
 ## Branch workflow and troubleshooting
 
 Use `feature/* → develop`; `main` will be introduced later. A 5xx postcode
 response currently conflates invalid input and provider failure; follow the
 correlation ID and the paired postcode gateway logs without recording postcode
-PII unnecessarily.
+PII unnecessarily. For client-generation failures, validate the checked-in
+contract and rerun `mvn -B clean verify`.
 
 ## Licence
 
