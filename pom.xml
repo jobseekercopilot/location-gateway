@@ -21,6 +21,7 @@
     <properties>
         <java.version>17</java.version>
         <lombok.version>1.18.32</lombok.version>
+        <openapi-generator.version>7.5.0</openapi-generator.version>
         <springdoc.version>2.3.0</springdoc.version>
     </properties>
 
@@ -38,14 +39,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.jobseekercopilot.generated</groupId>
-            <artifactId>postcode-io-gateway-client</artifactId>
-            <version>1.0.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/postcode-io-gateway-client-1.0.0.jar</systemPath>
         </dependency>
 
         <dependency>
@@ -76,6 +69,39 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <version>${openapi-generator.version}</version>
+                <executions>
+                    <execution>
+                        <id>generate-postcode-io-gateway-client</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/src/main/openapi/postcode-io-gateway.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi/postcode-io-gateway</output>
+                            <generatorName>java</generatorName>
+                            <library>resttemplate</library>
+                            <apiPackage>com.jobseekercopilot.generated.postcodeiogateway.api</apiPackage>
+                            <modelPackage>com.jobseekercopilot.generated.postcodeiogateway.model</modelPackage>
+                            <invokerPackage>com.jobseekercopilot.generated.postcodeiogateway.client</invokerPackage>
+                            <generateApiTests>false</generateApiTests>
+                            <generateModelTests>false</generateModelTests>
+                            <generateApiDocumentation>false</generateApiDocumentation>
+                            <generateModelDocumentation>false</generateModelDocumentation>
+                            <configOptions>
+                                <dateLibrary>java8</dateLibrary>
+                                <hideGenerationTimestamp>true</hideGenerationTimestamp>
+                                <openApiNullable>true</openApiNullable>
+                                <useJakartaEe>true</useJakartaEe>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
@@ -92,9 +118,6 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <includeSystemScope>true</includeSystemScope>
-                </configuration>
             </plugin>
         </plugins>
     </build>
