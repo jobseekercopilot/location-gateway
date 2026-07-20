@@ -27,12 +27,18 @@ postcode-io-gateway into the client location response.
 
 ```bash
 mvn -B clean verify
+./scripts/test-dependency-report-policy.sh
 mvn spring-boot:run
 docker build -t location-gateway .
 ```
 
+CI scans the resolved runtime dependency set with pinned Trivy releases,
+publishes the JSON report, and rejects unaccepted Critical or High findings.
+See [dependency security](docs/DEPENDENCY_SECURITY.md) for local reproduction,
+scanner scope, and the time-bounded exception process.
+
 Maven generates the postcode RestTemplate client from the versioned consumer
-contract at `src/main/openapi/postcode-io-gateway.yaml`. OpenAPI Generator 7.5.0
+contract at `src/main/openapi/postcode-io-gateway.yaml`. OpenAPI Generator 7.24.0
 is pinned, output stays under `target/generated-sources`, and neither a sibling
 checkout nor `libs/*.jar` is required. See the
 [contract update procedure](src/main/openapi/README.md) before changing the
