@@ -26,7 +26,7 @@ validation, resilience, testing and operational findings still block beta.
   removed.
 - The owned postcode consumer contract is versioned under `src/main/openapi`
   and records the reviewed provider repository revision.
-- OpenAPI Generator 7.5.0 is pinned and emits the RestTemplate client beneath
+- OpenAPI Generator 7.5.0 was pinned and emitted the RestTemplate client beneath
   `target/generated-sources`; generated sources and binaries remain ignored.
 - Contract tests prove the generated request path, JSON field mapping and
   required postcode parameter behavior.
@@ -34,5 +34,23 @@ validation, resilience, testing and operational findings still block beta.
   complete-history secret-scan evidence is recorded in LOC-01 and its pull
   request.
 
-This resolves LOC-01 only. LOC-02 through LOC-08 remain open, so the service is
+At completion of LOC-01, LOC-02 through LOC-08 remained open.
+
+## LOC-08 remediation evidence
+
+- The verified pre-remediation runtime set contained 83 Java packages and 47
+  Critical/High findings (4 Critical and 43 High).
+- Spring Boot was upgraded from 3.2.0 to 4.1.0, springdoc-openapi to 3.0.3,
+  Lombok to 1.18.46, and OpenAPI Generator to 7.24.0. The Spring Boot 4 REST
+  client and MVC test modules/package migrations were adopted.
+- The post-remediation scan covered 111 packages with zero Critical or High
+  findings. The generated RestTemplate client contract tests still pass.
+- CI uses pinned Trivy and action revisions, caches advisory data, scans only
+  Maven's resolved runtime dependency directory, uploads the JSON report, and
+  applies a fail-closed policy after report generation.
+- Policy tests reject Critical findings, malformed or uncovered reports, and
+  missing, invalid, or expired risk-exception metadata. Full details are in
+  `docs/DEPENDENCY_SECURITY.md`.
+
+This resolves LOC-08 only. LOC-02 through LOC-07 remain open, so the service is
 still **not beta-ready**.
