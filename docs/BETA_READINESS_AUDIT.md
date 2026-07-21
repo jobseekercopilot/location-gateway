@@ -5,7 +5,7 @@ Audit date: 18 July 2026
 Status: **Not beta-ready.** LOC-01 now generates the postcode client from a
 versioned consumer contract, LOC-03 validates postcode input and preserves safe
 error semantics, LOC-04 bounds the downstream call, LOC-05 adds bounded
-cache/rate/telemetry controls, and clean builds no longer require an untracked
+cache/rate/telemetry controls, LOC-07 hardens runtime operations, and clean builds no longer require an untracked
 JAR. LOC-02 implements the UI-advertised bounded place-name route. Remaining
 testing and operational findings still block beta.
 
@@ -19,8 +19,21 @@ testing and operational findings still block beta.
 | [LOC-04](https://github.com/jobseekercopilot/location-gateway/issues/4) | Bound the synchronous provider call | **Remediated:** the generated client has validated connect/read deadlines, bounded transient-response retry/backoff, a per-instance circuit and circuit-derived readiness. | The cascading thread-exhaustion risk is bounded; each instance may still observe failures before its local circuit opens. | Retain slow/outage/recovery tests and documented budgets; tune only from measured latency/capacity. | LOC-01, postcode SLO and repository-owned resilience policy. | No | M |
 | [LOC-05](https://github.com/jobseekercopilot/location-gateway/issues/5) | Add cache/rate controls and operational signals | **Remediated:** successful canonical lookups use a TTL/LRU-bounded cache; direct callers have bounded in-memory throttling; safe provider/cache/rate metrics and beta alerts are defined. | The evidenced provider-waste/visibility risk is bounded; instance-local state and direct-caller aggregation are documented residual risks. | Retain normalization/TTL/size/rate/metric privacy tests; tune only from measured capacity and deploy metrics behind authenticated collection. | Existing Micrometer/Actuator approach. | No | M |
 | [LOC-06](https://github.com/jobseekercopilot/location-gateway/issues/6) | Add meaningful contract/integration testing | Four tests cover a happy service mapping, controller shape and OpenAPI; no invalid/outage/rate/timeout/contract tests exist. | **High / P1 testing:** resilience/error semantics are unproven. | Add contract plus provider-stub integration tests for full postcode and all negative scenarios; include browser E2E. | LOC-01–05. | Yes | M |
-| [LOC-07](https://github.com/jobseekercopilot/location-gateway/issues/7) | Harden container, readiness and docs | Docker skips tests and runs root/mutable images; health details are always exposed and no downstream readiness is defined. | **Medium / P1 operational/docs:** the image and runbook remain unsafe and incomplete for beta operation. | Pin/non-root/scan image, run verify, add dependency readiness/graceful shutdown, and document actual operations. | LOC-01/02. | Yes | M |
+| [LOC-07](https://github.com/jobseekercopilot/location-gateway/issues/7) | Harden container, readiness and docs | **Remediated:** aggregate circuit-derived readiness, graceful shutdown and a test-enforcing digest-pinned non-root image with blocking image scan and operations runbook are present. | The repository operational baseline is complete; private telemetry export/alert delivery and complete browser evidence remain external blockers. | Retain runtime/readiness/privacy tests and prove alert delivery in the controlled beta environment. | LOC-01 and repository-side LOC-02 behavior complete. | Yes | M |
 | [LOC-08](https://github.com/jobseekercopilot/location-gateway/issues/8) | Establish reliable dependency vulnerability scanning | CI emits `mvn dependency:tree` but performs no vulnerability analysis; no dependable advisory-feed cache or risk-acceptance workflow is configured. | **High / P1 dependency:** vulnerable gateway or HTTP libraries can reach beta without a reliable blocking signal. | Select a proprietary-compatible Maven scanner, configure authenticated/cached advisory data, publish a machine-readable report, fail on unaccepted Critical/High findings and document the risk-acceptance process. | Platform CI and advisory-feed decision. | Yes | M |
+
+## LOC-07 remediation evidence
+
+- General health and downstream-circuit readiness are aggregate-only, contain
+  no contributor details and never make a synthetic downstream request.
+- Metrics are private by default; existing bounded signals and alerts remain
+  documented in the location controls and downstream resilience contracts.
+- Release validation runs the complete Maven suite before copying the verified
+  JAR. The digest-pinned runtime runs read-only as `10001:10001`, is tested
+  through downstream outage and graceful stop, and receives a blocking
+  Critical/High OS and library image scan.
+- README and the operations runbook record the real API/configuration,
+  develop-only workflow, proprietary licence, ownership and residual risks.
 
 ## LOC-01 remediation evidence
 

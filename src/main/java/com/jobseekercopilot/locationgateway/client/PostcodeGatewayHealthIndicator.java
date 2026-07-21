@@ -14,9 +14,8 @@ public class PostcodeGatewayHealthIndicator implements HealthIndicator {
 
     @Override
     public Health health() {
-        String state = circuitBreaker.stateName();
         return circuitBreaker.isOpen()
-                ? Health.outOfService().withDetail("circuit", state).build()
-                : Health.up().withDetail("circuit", state).build();
+                ? Health.outOfService().build()
+                : Health.up().build();
     }
 }

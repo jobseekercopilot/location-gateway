@@ -25,6 +25,7 @@ through postcode-io-gateway into the client location response.
 | `LOCATION_RATE_MAXIMUM_REQUESTS` / `LOCATION_RATE_WINDOW` | `120` / `1m` | Requests allowed per direct caller and fixed window |
 | `LOCATION_RATE_MAXIMUM_TRACKED_CALLERS` | `20000` | Bounded per-instance caller state |
 | `APP_LOG_LEVEL` | `INFO` | Application log level |
+| `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE` | `health,info` | Actuator endpoints; metrics require an approved private operations network |
 
 ## API, health and build
 
@@ -33,14 +34,20 @@ through postcode-io-gateway into the client location response.
   `502`, `503` and `504` errors.
 - `GET /api/locations?q={place-name}` accepts a restricted 2–80 character
   query and returns at most ten matches through the same safe failure policy.
-- `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`, `/actuator/metrics`
+- `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
+- `/actuator/health/readiness` (aggregate application and downstream-circuit readiness)
 
 ```bash
 mvn -B clean verify
 ./scripts/test-dependency-report-policy.sh
+./scripts/verify-container.sh
 mvn spring-boot:run
-docker build -t location-gateway .
 ```
+
+Release-shaped container verification runs the full suite before copying the
+verified JAR into a digest-pinned image. The runtime is read-only, uses fixed
+UID/GID `10001:10001`, supports graceful shutdown and receives a blocking
+Critical/High image scan in CI. See [service operations](docs/OPERATIONS.md).
 
 CI scans the resolved runtime dependency set with pinned Trivy releases,
 publishes the JSON report, and rejects unaccepted Critical or High findings.
@@ -73,7 +80,7 @@ for budgets, error behavior, tuning, tests, ownership, and residual risk.
 
 ## Branch workflow and troubleshooting
 
-Use `feature/* → develop`; `main` will be introduced later. Postcode values are
+Use `feature/* → develop`; `main` is not used for application delivery. Postcode values are
 redacted from request-path logs, and error responses do not echo input or
 downstream response details. Use the correlation ID to join gateway logs. For
 client-generation failures, validate the checked-in contract and rerun

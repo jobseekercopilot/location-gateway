@@ -1,6 +1,7 @@
-target/
+target/*
 libs/
 *.jar
+!target/location-gateway-1.0.0.jar
 *.class
 *.log
 !.mvn/wrapper/maven-wrapper.jar
