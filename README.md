@@ -21,6 +21,9 @@ postcode-io-gateway into the client location response.
 | `POSTCODE_GATEWAY_MAX_ATTEMPTS` | `2` | Maximum attempts for retryable idempotent responses |
 | `POSTCODE_GATEWAY_INITIAL_BACKOFF` / `POSTCODE_GATEWAY_MAX_BACKOFF` | `100ms` / `250ms` | Bounded retry backoff |
 | `POSTCODE_GATEWAY_CIRCUIT_FAILURE_THRESHOLD` / `POSTCODE_GATEWAY_CIRCUIT_OPEN_DURATION` | `5` / `30s` | Failed logical calls before open and recovery-probe delay |
+| `LOCATION_CACHE_TTL` / `LOCATION_CACHE_MAXIMUM_ENTRIES` | `15m` / `10000` | Successful normalized postcode cache lifetime and per-instance bound |
+| `LOCATION_RATE_MAXIMUM_REQUESTS` / `LOCATION_RATE_WINDOW` | `120` / `1m` | Requests allowed per direct caller and fixed window |
+| `LOCATION_RATE_MAXIMUM_TRACKED_CALLERS` | `20000` | Bounded per-instance caller state |
 | `APP_LOG_LEVEL` | `INFO` | Application log level |
 
 ## API, health and build
@@ -28,7 +31,7 @@ postcode-io-gateway into the client location response.
 - `GET /api/postcodes/{postcode}` accepts a valid UK postcode or outcode,
   canonicalises it before lookup, and returns stable `400`, `404`, `429`,
   `502`, `503` and `504` errors.
-- `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
+- `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`, `/actuator/metrics`
 
 `GET /api/locations?q=` is not implemented; LOC-02 owns that decision.
 
@@ -50,6 +53,13 @@ is pinned, output stays under `target/generated-sources`, and neither a sibling
 checkout nor `libs/*.jar` is required. See the
 [contract update procedure](src/main/openapi/README.md) before changing the
 provider API. Do not commit generated Java or client binaries.
+
+Successful lookups use a bounded in-memory cache keyed only by the canonical
+postcode/outcode. Direct callers have a bounded fixed-window capacity limit;
+`429` includes `Retry-After`. Provider latency/outcome, retry, circuit, cache,
+and rate metrics never contain postcode or caller labels. See
+[location controls](docs/LOCATION_CONTROLS.md) for privacy, tuning, beta alert
+thresholds, trusted-proxy constraints, and residual per-instance limitations.
 
 The generated client uses explicit connect/read deadlines. Only transient HTTP
 responses receive one bounded retry; transport timeouts are not retried. A

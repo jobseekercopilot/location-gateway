@@ -2,6 +2,7 @@ package com.jobseekercopilot.locationgateway.controller;
 
 import com.jobseekercopilot.locationgateway.model.Location;
 import com.jobseekercopilot.locationgateway.model.LocationResponse;
+import com.jobseekercopilot.locationgateway.ratelimit.CallerRateLimiter;
 import com.jobseekercopilot.locationgateway.service.LocationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +26,7 @@ import java.util.List;
 public class LocationController {
 
     private final LocationService locationService;
+    private final CallerRateLimiter callerRateLimiter;
 
     @GetMapping(value = "/postcodes/{postcode}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
@@ -47,8 +50,10 @@ public class LocationController {
     })
     public ResponseEntity<LocationResponse> getLocationByPostcode(
             @Parameter(description = "UK postcode", required = true, example = "SW1A 1AA")
-            @PathVariable String postcode) {
+            @PathVariable String postcode,
+            HttpServletRequest request) {
 
+        callerRateLimiter.check(request.getRemoteAddr());
         Location location = locationService.getLocationFromPostcodeIo(postcode);
         return ResponseEntity.ok(new LocationResponse(
                 200,

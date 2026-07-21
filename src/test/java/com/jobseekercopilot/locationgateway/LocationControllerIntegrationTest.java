@@ -4,6 +4,8 @@ import com.jobseekercopilot.locationgateway.controller.LocationController;
 import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
+import com.jobseekercopilot.locationgateway.ratelimit.CallerRateLimiter;
+import com.jobseekercopilot.locationgateway.ratelimit.LocationRateLimitException;
 import com.jobseekercopilot.locationgateway.service.LocationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +18,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -27,6 +31,9 @@ class LocationControllerIntegrationTest {
 
     @MockitoBean
     private LocationService locationService;
+
+    @MockitoBean
+    private CallerRateLimiter callerRateLimiter;
 
     @Test
     void testGetLocationByPostcode_success() throws Exception {
@@ -97,5 +104,21 @@ class LocationControllerIntegrationTest {
                         .accept(MediaType.TEXT_PLAIN))
                 .andExpect(status().isNotAcceptable())
                 .andExpect(content().string(""));
+    }
+
+    @Test
+    void callerRateLimitReturnsStableRetryableResponseWithoutCallingService() throws Exception {
+        doThrow(new LocationRateLimitException(42))
+                .when(callerRateLimiter).check(org.mockito.ArgumentMatchers.anyString());
+
+        mockMvc.perform(get("/api/postcodes/LS1").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "42"))
+                .andExpect(jsonPath("$.statusCode").value(429))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Too many location requests. Try again later."))
+                .andExpect(jsonPath("$.locations", hasSize(0)));
+
+        verifyNoInteractions(locationService);
     }
 }

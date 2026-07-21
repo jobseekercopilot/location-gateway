@@ -3,10 +3,12 @@ package com.jobseekercopilot.locationgateway.service;
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
 import com.jobseekercopilot.locationgateway.client.PostcodeGatewayCircuitOpenException;
 import com.jobseekercopilot.locationgateway.client.ResilientPostcodeGatewayClient;
+import com.jobseekercopilot.locationgateway.cache.LocationLookupCache;
 import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
 import java.net.SocketTimeoutException;
+import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +33,9 @@ class LocationServiceTest {
 
     @Mock
     private ResilientPostcodeGatewayClient postcodeGatewayClient;
+
+    @Mock
+    private LocationLookupCache locationLookupCache;
 
     @InjectMocks
     private LocationService locationService;
@@ -59,6 +64,44 @@ class LocationServiceTest {
         assertEquals(-1.5491, location.getLongitude());
 
         verify(postcodeGatewayClient, times(1)).lookup("LS1");
+        verify(locationLookupCache).put(eq("LS1"), same(location));
+    }
+
+    @Test
+    void canonicalPostcodeVariantsShareSuccessfulCacheEntry() {
+        PostcodeLocation providerLocation = new PostcodeLocation();
+        providerLocation.setPostcode("SW1A 1AA");
+        providerLocation.setRegion("London");
+        providerLocation.setAdminDistrict("Westminster");
+        Location cached = new Location(
+                "SW1A 1AA", "Westminster, London", "SW1A 1AA", "London", 51.501, -0.142);
+        when(locationLookupCache.get("SW1A1AA"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(cached));
+        when(postcodeGatewayClient.lookup("SW1A1AA")).thenReturn(providerLocation);
+
+        Location first = locationService.getLocationFromPostcodeIo("sw1a 1aa");
+        Location second = locationService.getLocationFromPostcodeIo(" SW1A1AA ");
+
+        assertEquals("SW1A 1AA", first.getPostcode());
+        assertSame(cached, second);
+        verify(postcodeGatewayClient).lookup("SW1A1AA");
+        verify(locationLookupCache).put("SW1A1AA", first);
+    }
+
+    @Test
+    void providerFailuresAreNeverCached() {
+        when(locationLookupCache.get("LS1")).thenReturn(Optional.empty());
+        when(postcodeGatewayClient.lookup("LS1"))
+                .thenThrow(new ResourceAccessException("connection refused"));
+
+        assertThrows(LocationLookupException.class,
+                () -> locationService.getLocationFromPostcodeIo("LS1"));
+        assertThrows(LocationLookupException.class,
+                () -> locationService.getLocationFromPostcodeIo("LS1"));
+
+        verify(postcodeGatewayClient, times(2)).lookup("LS1");
+        verify(locationLookupCache, never()).put(anyString(), any());
     }
 
     @ParameterizedTest
