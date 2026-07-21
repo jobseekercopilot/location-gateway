@@ -14,6 +14,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 
@@ -63,6 +64,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     ResponseEntity<LocationResponse> handleUnsupportedContentType() {
         return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported content type.");
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<LocationResponse> handleMissingResource() {
+        return error(HttpStatus.NOT_FOUND, "Resource not found.");
     }
 
     @ExceptionHandler(Exception.class)

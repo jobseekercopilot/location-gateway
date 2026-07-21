@@ -20,8 +20,9 @@ class PostcodeGatewayHealthIndicatorTest {
         PostcodeGatewayHealthIndicator indicator = new PostcodeGatewayHealthIndicator(breaker);
 
         assertEquals(Status.UP, indicator.health().getStatus());
+        assertEquals(0, indicator.health().getDetails().size());
         breaker.recordFailure();
         assertEquals(Status.OUT_OF_SERVICE, indicator.health().getStatus());
-        assertEquals("OPEN", indicator.health().getDetails().get("circuit"));
+        assertEquals(0, indicator.health().getDetails().size());
     }
 }
