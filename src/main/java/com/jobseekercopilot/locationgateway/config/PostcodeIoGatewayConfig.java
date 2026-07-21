@@ -2,21 +2,32 @@ package com.jobseekercopilot.locationgateway.config;
 
 import com.jobseekercopilot.generated.postcodeiogateway.api.PostcodeApi;
 import com.jobseekercopilot.generated.postcodeiogateway.client.ApiClient;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@EnableConfigurationProperties(PostcodeGatewayProperties.class)
 public class PostcodeIoGatewayConfig {
+    private final PostcodeGatewayProperties properties;
+    private final RestTemplateBuilder restTemplateBuilder;
 
-    @Value("${postcode.io.gateway.url}")
-    private String postcodeIoGatewayUrl;
+    public PostcodeIoGatewayConfig(
+            PostcodeGatewayProperties properties,
+            RestTemplateBuilder restTemplateBuilder) {
+        this.properties = properties;
+        this.restTemplateBuilder = restTemplateBuilder;
+    }
 
     @Bean
     public ApiClient postcodeIoApiClient() {
-        ApiClient apiClient = new ApiClient();
-        apiClient.setBasePath(postcodeIoGatewayUrl);
-        return apiClient;
+        properties.validate();
+        return new ApiClient(restTemplateBuilder
+                .connectTimeout(properties.getConnectTimeout())
+                .readTimeout(properties.getReadTimeout())
+                .build())
+                .setBasePath(properties.getUrl());
     }
 
     @Bean

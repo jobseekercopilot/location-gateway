@@ -4,7 +4,8 @@ Spring Boot facade that currently maps a UK postcode/outcode through
 postcode-io-gateway into the client location response.
 
 > Beta status: not beta-ready. The advertised general search endpoint is
-> absent and resilience, validation and operational blockers remain. See
+> absent and testing/operational blockers remain. Downstream calls are bounded
+> and postcode validation/error semantics are stable. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 ## Requirements and configuration
@@ -16,6 +17,10 @@ postcode-io-gateway into the client location response.
 |---|---|---|
 | `SERVER_PORT` | `8081` | HTTP port |
 | `POSTCODE_IO_GATEWAY_URL` | `http://localhost:8082` | Postcode gateway |
+| `POSTCODE_GATEWAY_CONNECT_TIMEOUT` / `POSTCODE_GATEWAY_READ_TIMEOUT` | `500ms` / `5s` | Connection and per-attempt response deadlines |
+| `POSTCODE_GATEWAY_MAX_ATTEMPTS` | `2` | Maximum attempts for retryable idempotent responses |
+| `POSTCODE_GATEWAY_INITIAL_BACKOFF` / `POSTCODE_GATEWAY_MAX_BACKOFF` | `100ms` / `250ms` | Bounded retry backoff |
+| `POSTCODE_GATEWAY_CIRCUIT_FAILURE_THRESHOLD` / `POSTCODE_GATEWAY_CIRCUIT_OPEN_DURATION` | `5` / `30s` | Failed logical calls before open and recovery-probe delay |
 | `APP_LOG_LEVEL` | `INFO` | Application log level |
 
 ## API, health and build
@@ -45,6 +50,12 @@ is pinned, output stays under `target/generated-sources`, and neither a sibling
 checkout nor `libs/*.jar` is required. See the
 [contract update procedure](src/main/openapi/README.md) before changing the
 provider API. Do not commit generated Java or client binaries.
+
+The generated client uses explicit connect/read deadlines. Only transient HTTP
+responses receive one bounded retry; transport timeouts are not retried. A
+per-instance circuit rejects during an observed outage and contributes safe
+readiness state. See the [downstream resilience policy](docs/DOWNSTREAM_RESILIENCE.md)
+for budgets, error behavior, tuning, tests, ownership, and residual risk.
 
 ## Branch workflow and troubleshooting
 

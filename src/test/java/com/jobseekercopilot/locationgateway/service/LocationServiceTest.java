@@ -1,10 +1,13 @@
 package com.jobseekercopilot.locationgateway.service;
 
-import com.jobseekercopilot.generated.postcodeiogateway.api.PostcodeApi;
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
-import com.jobseekercopilot.locationgateway.model.Location;
+import com.jobseekercopilot.locationgateway.client.PostcodeGatewayCircuitOpenException;
+import com.jobseekercopilot.locationgateway.client.ResilientPostcodeGatewayClient;
 import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
+import com.jobseekercopilot.locationgateway.model.Location;
+import java.net.SocketTimeoutException;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,8 +23,6 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
-import java.util.stream.Stream;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -29,7 +30,7 @@ import static org.mockito.Mockito.*;
 class LocationServiceTest {
 
     @Mock
-    private PostcodeApi postcodeApi;
+    private ResilientPostcodeGatewayClient postcodeGatewayClient;
 
     @InjectMocks
     private LocationService locationService;
@@ -45,7 +46,7 @@ class LocationServiceTest {
         mockLocation.setLatitude(53.8008);
         mockLocation.setLongitude(-1.5491);
 
-        when(postcodeApi.getLocationByPostcode("LS1")).thenReturn(mockLocation);
+        when(postcodeGatewayClient.lookup("LS1")).thenReturn(mockLocation);
 
         Location location = locationService.getLocationFromPostcodeIo(postcode);
 
@@ -57,7 +58,7 @@ class LocationServiceTest {
         assertEquals(53.8008, location.getLatitude());
         assertEquals(-1.5491, location.getLongitude());
 
-        verify(postcodeApi, times(1)).getLocationByPostcode("LS1");
+        verify(postcodeGatewayClient, times(1)).lookup("LS1");
     }
 
     @ParameterizedTest
@@ -65,7 +66,7 @@ class LocationServiceTest {
     void rejectsInvalidPostcodesBeforeCallingProvider(String postcode) {
         assertThrows(InvalidPostcodeException.class,
                 () -> locationService.getLocationFromPostcodeIo(postcode));
-        verifyNoInteractions(postcodeApi);
+        verifyNoInteractions(postcodeGatewayClient);
     }
 
     @ParameterizedTest
@@ -74,7 +75,7 @@ class LocationServiceTest {
         RestClientException providerFailure = providerStatus.is4xxClientError()
                 ? new HttpClientErrorException(providerStatus, "sensitive provider detail")
                 : new HttpServerErrorException(providerStatus, "sensitive provider detail");
-        when(postcodeApi.getLocationByPostcode("SW1A1AA")).thenThrow(providerFailure);
+        when(postcodeGatewayClient.lookup("SW1A1AA")).thenThrow(providerFailure);
 
         LocationLookupException exception = assertThrows(LocationLookupException.class,
                 () -> locationService.getLocationFromPostcodeIo("sw1a 1aa"));
@@ -85,7 +86,7 @@ class LocationServiceTest {
 
     @Test
     void mapsConnectionFailureToServiceUnavailable() {
-        when(postcodeApi.getLocationByPostcode("LS1"))
+        when(postcodeGatewayClient.lookup("LS1"))
                 .thenThrow(new ResourceAccessException("connection refused"));
 
         LocationLookupException exception = assertThrows(LocationLookupException.class,
@@ -95,8 +96,30 @@ class LocationServiceTest {
     }
 
     @Test
+    void mapsReadTimeoutToGatewayTimeout() {
+        when(postcodeGatewayClient.lookup("LS1"))
+                .thenThrow(new ResourceAccessException("read timed out", new SocketTimeoutException()));
+
+        LocationLookupException exception = assertThrows(LocationLookupException.class,
+                () -> locationService.getLocationFromPostcodeIo("LS1"));
+
+        assertEquals(HttpStatus.GATEWAY_TIMEOUT, exception.getStatus());
+    }
+
+    @Test
+    void mapsOpenCircuitToServiceUnavailableWithoutProviderDetail() {
+        when(postcodeGatewayClient.lookup("LS1"))
+                .thenThrow(new PostcodeGatewayCircuitOpenException());
+
+        LocationLookupException exception = assertThrows(LocationLookupException.class,
+                () -> locationService.getLocationFromPostcodeIo("LS1"));
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, exception.getStatus());
+    }
+
+    @Test
     void mapsOtherClientFailureToBadGateway() {
-        when(postcodeApi.getLocationByPostcode("LS1"))
+        when(postcodeGatewayClient.lookup("LS1"))
                 .thenThrow(new RestClientException("invalid response"));
 
         LocationLookupException exception = assertThrows(LocationLookupException.class,
