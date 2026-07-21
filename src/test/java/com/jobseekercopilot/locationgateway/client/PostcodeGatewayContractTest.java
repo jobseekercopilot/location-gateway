@@ -4,11 +4,14 @@ import com.jobseekercopilot.generated.postcodeiogateway.api.PostcodeApi;
 import com.jobseekercopilot.generated.postcodeiogateway.client.ApiClient;
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,6 +21,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class PostcodeGatewayContractTest {
 
@@ -62,5 +66,28 @@ class PostcodeGatewayContractTest {
                 () -> postcodeApi.getLocationByPostcode(null));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = HttpStatus.class, names = {
+            "BAD_REQUEST", "NOT_FOUND", "TOO_MANY_REQUESTS", "BAD_GATEWAY",
+            "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"
+    })
+    void generatedClientPreservesDocumentedProviderErrorStatus(HttpStatus status) {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        PostcodeApi postcodeApi = new PostcodeApi(
+                new ApiClient(restTemplate).setBasePath("http://postcode.test")
+        );
+        server.expect(once(), requestTo("http://postcode.test/api/postcodes/LS1"))
+                .andRespond(withStatus(status));
+
+        RestClientResponseException exception = assertThrows(
+                RestClientResponseException.class,
+                () -> postcodeApi.getLocationByPostcode("LS1")
+        );
+
+        assertEquals(status, exception.getStatusCode());
+        server.verify();
     }
 }

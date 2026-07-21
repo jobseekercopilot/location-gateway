@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: Consumer contract used by location-gateway.
 x-source-repository: jobseekercopilot/postcode-io-gateway
-x-source-revision: 4f41069d72fe167427e75cd7bf6564e812ce4b2c
+x-source-revision: 0023433bd5097de9b4e350d6a6977a7bfbc4578c
 paths:
   /api/postcodes/{postcode}:
     get:
@@ -24,8 +24,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PostcodeLocation'
+        '400':
+          description: Invalid UK postcode or outcode
+        '404':
+          description: Postcode not found
+        '429':
+          description: Provider rate limited
+        '502':
+          description: Provider returned an invalid response
+        '503':
+          description: Postcode service unavailable
+        '504':
+          description: Postcode service timed out
         '500':
-          description: Postcode provider or lookup failure
+          description: Unexpected postcode service failure
 components:
   schemas:
     PostcodeLocation:

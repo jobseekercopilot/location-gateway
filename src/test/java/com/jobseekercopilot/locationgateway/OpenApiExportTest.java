@@ -2,6 +2,7 @@ package com.jobseekercopilot.locationgateway;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,5 +23,9 @@ class OpenApiExportTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target/openapi.json"), spec);
+        for (String responseStatus : new String[]{"400", "404", "429", "502", "503", "504"}) {
+            assertTrue(spec.contains("\"" + responseStatus + "\""),
+                    () -> "OpenAPI is missing response status " + responseStatus);
+        }
     }
 }

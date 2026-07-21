@@ -5,9 +5,13 @@ import com.jobseekercopilot.locationgateway.model.LocationResponse;
 import com.jobseekercopilot.locationgateway.service.LocationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,32 +25,36 @@ public class LocationController {
 
     private final LocationService locationService;
 
-    @GetMapping("/postcodes/{postcode}")
+    @GetMapping(value = "/postcodes/{postcode}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
             summary = "Get location by postcode",
             description = "Retrieves location details for a UK postcode via postcode-io-gateway."
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Location found"),
+            @ApiResponse(responseCode = "400", description = "Invalid postcode or outcode",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Location not found",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "429", description = "Request rate limited",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "502", description = "Invalid provider response",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "503", description = "Location provider unavailable",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "504", description = "Location provider timed out",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class)))
+    })
     public ResponseEntity<LocationResponse> getLocationByPostcode(
             @Parameter(description = "UK postcode", required = true, example = "SW1A 1AA")
             @PathVariable String postcode) {
 
-        try {
-            Location location = locationService.getLocationFromPostcodeIo(postcode);
-
-            return ResponseEntity.ok(new LocationResponse(
-                    200,
-                    true,
-                    "Retrieved location for postcode " + postcode + ".",
-                    List.of(location)
-            ));
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new LocationResponse(
-                    500,
-                    false,
-                    "Error retrieving location for postcode " + postcode + ": " + e.getMessage(),
-                    null
-            ));
-        }
+        Location location = locationService.getLocationFromPostcodeIo(postcode);
+        return ResponseEntity.ok(new LocationResponse(
+                200,
+                true,
+                "Location retrieved.",
+                List.of(location)
+        ));
     }
 }

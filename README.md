@@ -20,7 +20,9 @@ postcode-io-gateway into the client location response.
 
 ## API, health and build
 
-- `GET /api/postcodes/{postcode}`
+- `GET /api/postcodes/{postcode}` accepts a valid UK postcode or outcode,
+  canonicalises it before lookup, and returns stable `400`, `404`, `429`,
+  `502`, `503` and `504` errors.
 - `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
 
 `GET /api/locations?q=` is not implemented; LOC-02 owns that decision.
@@ -46,11 +48,11 @@ provider API. Do not commit generated Java or client binaries.
 
 ## Branch workflow and troubleshooting
 
-Use `feature/* → develop`; `main` will be introduced later. A 5xx postcode
-response currently conflates invalid input and provider failure; follow the
-correlation ID and the paired postcode gateway logs without recording postcode
-PII unnecessarily. For client-generation failures, validate the checked-in
-contract and rerun `mvn -B clean verify`.
+Use `feature/* → develop`; `main` will be introduced later. Postcode values are
+redacted from request-path logs, and error responses do not echo input or
+downstream response details. Use the correlation ID to join gateway logs. For
+client-generation failures, validate the checked-in contract and rerun
+`mvn -B clean verify`.
 
 ## Licence
 
