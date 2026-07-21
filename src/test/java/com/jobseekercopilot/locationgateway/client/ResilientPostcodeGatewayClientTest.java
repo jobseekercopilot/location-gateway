@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
@@ -31,11 +32,26 @@ class ResilientPostcodeGatewayClientTest {
                 .thenReturn(expected);
         PostcodeGatewayProperties properties = properties();
         List<Duration> sleeps = new ArrayList<>();
-        ResilientPostcodeGatewayClient client = client(api, properties, new AtomicLong(), sleeps::add);
+        SimpleMeterRegistry metrics = new SimpleMeterRegistry();
+        ResilientPostcodeGatewayClient client = new ResilientPostcodeGatewayClient(
+                api,
+                new PostcodeGatewayCircuitBreaker(properties, new AtomicLong()::get),
+                properties,
+                metrics,
+                sleeps::add);
 
         assertSame(expected, client.lookup("LS1"));
         verify(api, times(2)).getLocationByPostcode("LS1");
         assertEquals(List.of(Duration.ofMillis(10)), sleeps);
+        assertEquals(1, metrics.get("location.postcode.provider.requests")
+                .tag("outcome", "server_error").timer().count());
+        assertEquals(1, metrics.get("location.postcode.provider.requests")
+                .tag("outcome", "success").timer().count());
+        assertEquals(1, metrics.get("location.postcode.provider.retries").counter().count());
+        assertEquals(0, metrics.getMeters().stream()
+                .flatMap(meter -> meter.getId().getTags().stream())
+                .filter(tag -> tag.getValue().contains("LS1"))
+                .count());
     }
 
     @Test
@@ -95,7 +111,7 @@ class ResilientPostcodeGatewayClientTest {
         AtomicLong nanoTime = new AtomicLong();
         PostcodeGatewayCircuitBreaker breaker = new PostcodeGatewayCircuitBreaker(properties, nanoTime::get);
         ResilientPostcodeGatewayClient client = new ResilientPostcodeGatewayClient(
-                api, breaker, properties, duration -> { });
+                api, breaker, properties, new SimpleMeterRegistry(), duration -> { });
 
         assertThrows(ResourceAccessException.class, () -> client.lookup("LS1"));
         assertThrows(PostcodeGatewayCircuitOpenException.class, () -> client.lookup("LS1"));
@@ -113,6 +129,7 @@ class ResilientPostcodeGatewayClientTest {
                 api,
                 new PostcodeGatewayCircuitBreaker(properties, nanoTime::get),
                 properties,
+                new SimpleMeterRegistry(),
                 sleeper);
     }
 

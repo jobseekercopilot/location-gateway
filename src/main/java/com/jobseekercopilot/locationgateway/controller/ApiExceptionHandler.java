@@ -3,9 +3,11 @@ package com.jobseekercopilot.locationgateway.controller;
 import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.LocationResponse;
+import com.jobseekercopilot.locationgateway.ratelimit.LocationRateLimitException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -22,6 +24,14 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidPostcodeException.class)
     ResponseEntity<LocationResponse> handleInvalidPostcode() {
         return error(HttpStatus.BAD_REQUEST, "Invalid postcode or outcode.");
+    }
+
+    @ExceptionHandler(LocationRateLimitException.class)
+    ResponseEntity<LocationResponse> handleCallerRateLimit(LocationRateLimitException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.getRetryAfterSeconds()))
+                .body(response(HttpStatus.TOO_MANY_REQUESTS,
+                        "Too many location requests. Try again later."));
     }
 
     @ExceptionHandler(LocationLookupException.class)
@@ -56,8 +66,12 @@ public class ApiExceptionHandler {
     }
 
     private ResponseEntity<LocationResponse> error(HttpStatus status, String message) {
-        return ResponseEntity.status(status).body(new LocationResponse(
+        return ResponseEntity.status(status).body(response(status, message));
+    }
+
+    private LocationResponse response(HttpStatus status, String message) {
+        return new LocationResponse(
                 status.value(), false, message, List.of()
-        ));
+        );
     }
 }

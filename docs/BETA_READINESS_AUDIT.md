@@ -4,9 +4,10 @@ Audit date: 18 July 2026
 
 Status: **Not beta-ready.** LOC-01 now generates the postcode client from a
 versioned consumer contract, LOC-03 validates postcode input and preserves safe
-error semantics, LOC-04 bounds the downstream call, and clean builds no longer
-require an untracked JAR. The UI-advertised general search route does not exist,
-and remaining testing and operational findings still block beta.
+error semantics, LOC-04 bounds the downstream call, LOC-05 adds bounded
+cache/rate/telemetry controls, and clean builds no longer require an untracked
+JAR. The UI-advertised general search route does not exist, and remaining
+testing and operational findings still block beta.
 
 ## Findings
 
@@ -16,7 +17,7 @@ and remaining testing and operational findings still block beta.
 | [LOC-02](https://github.com/jobseekercopilot/location-gateway/issues/2) | Implement or remove location-name search | Client and README use `GET /api/locations?q=`, but controller only maps `/api/postcodes/{postcode}`. | **High / P1 functional:** location suggestions fail for names/partial input. | Agree provider/API ownership; implement bounded search or remove the feature/contract; test partial, empty and no-result cases. | Client decision/provider capability. | Yes | M |
 | [LOC-03](https://github.com/jobseekercopilot/location-gateway/issues/3) | Validate postcode input and map provider errors | Controller accepts unconstrained path text, catches every exception as 500 and includes exception text and postcode in response. | **High / P1 API/security:** invalid/not-found/provider errors are indistinguishable and internal details leak. | Canonicalise and validate UK postcode/outcode; map 400/404/429/502/503/504 to stable errors; avoid echoing unnecessary PII; test malformed JSON/content types. | Postcode error contract. | Yes | M |
 | [LOC-04](https://github.com/jobseekercopilot/location-gateway/issues/4) | Bound the synchronous provider call | **Remediated:** the generated client has validated connect/read deadlines, bounded transient-response retry/backoff, a per-instance circuit and circuit-derived readiness. | The cascading thread-exhaustion risk is bounded; each instance may still observe failures before its local circuit opens. | Retain slow/outage/recovery tests and documented budgets; tune only from measured latency/capacity. | LOC-01, postcode SLO and repository-owned resilience policy. | No | M |
-| [LOC-05](https://github.com/jobseekercopilot/location-gateway/issues/5) | Add cache/rate controls and operational signals | No cache, caller rate limit, provider latency/error metric or alert requirement exists. | **Medium / P2 reliability/observability:** duplicate calls waste provider capacity and outages are invisible. | Define cache key/TTL/privacy, rate limit, metrics and beta alerts; test cache and throttling. | Monitoring approach. | No | M |
+| [LOC-05](https://github.com/jobseekercopilot/location-gateway/issues/5) | Add cache/rate controls and operational signals | **Remediated:** successful canonical lookups use a TTL/LRU-bounded cache; direct callers have bounded in-memory throttling; safe provider/cache/rate metrics and beta alerts are defined. | The evidenced provider-waste/visibility risk is bounded; instance-local state and direct-caller aggregation are documented residual risks. | Retain normalization/TTL/size/rate/metric privacy tests; tune only from measured capacity and deploy metrics behind authenticated collection. | Existing Micrometer/Actuator approach. | No | M |
 | [LOC-06](https://github.com/jobseekercopilot/location-gateway/issues/6) | Add meaningful contract/integration testing | Four tests cover a happy service mapping, controller shape and OpenAPI; no invalid/outage/rate/timeout/contract tests exist. | **High / P1 testing:** resilience/error semantics are unproven. | Add contract plus provider-stub integration tests for full postcode and all negative scenarios; include browser E2E. | LOC-01–05. | Yes | M |
 | [LOC-07](https://github.com/jobseekercopilot/location-gateway/issues/7) | Harden container, readiness and docs | Docker skips tests and runs root/mutable images; health details are always exposed and no downstream readiness is defined. | **Medium / P1 operational/docs:** the image and runbook remain unsafe and incomplete for beta operation. | Pin/non-root/scan image, run verify, add dependency readiness/graceful shutdown, and document actual operations. | LOC-01/02. | Yes | M |
 | [LOC-08](https://github.com/jobseekercopilot/location-gateway/issues/8) | Establish reliable dependency vulnerability scanning | CI emits `mvn dependency:tree` but performs no vulnerability analysis; no dependable advisory-feed cache or risk-acceptance workflow is configured. | **High / P1 dependency:** vulnerable gateway or HTTP libraries can reach beta without a reliable blocking signal. | Select a proprietary-compatible Maven scanner, configure authenticated/cached advisory data, publish a machine-readable report, fail on unaccepted Critical/High findings and document the risk-acceptance process. | Platform CI and advisory-feed decision. | Yes | M |
@@ -85,5 +86,25 @@ still **not beta-ready**.
 - `docs/DOWNSTREAM_RESILIENCE.md` records budgets, tuning rules, ownership and
   residual risk.
 
-This resolves LOC-03 and LOC-04 only. LOC-02 and LOC-05 through LOC-07 remain open, so the
-service is still **not beta-ready**.
+At completion of LOC-04, LOC-02 and LOC-05 through LOC-07 remained open, so the
+service was still **not beta-ready**.
+
+## LOC-05 remediation evidence
+
+- Successful lookups share one cache entry across canonical postcode variants;
+  failures are not cached. TTL, entry count, fixed-window request count/window,
+  and tracked-caller state are validated and bounded.
+- Cached values are defensive copies. Cache state stores no caller association;
+  rate state stores no postcode; neither postcode nor caller address appears in
+  metric labels.
+- Direct-caller throttling ignores spoofable forwarded headers and returns a
+  stable `429` with `Retry-After`. Bounded LRU state prevents memory exhaustion.
+- Low-cardinality cache/rate counters and provider outcome/latency/retry/circuit
+  metrics are exposed through Actuator. The operational policy defines concrete
+  beta alert thresholds, ownership, tuning constraints and residual risks.
+- Unit/MVC tests cover TTL expiry, LRU eviction, defensive copies, canonical
+  hits, failure misses, request rejection/window reset/state eviction, redacted
+  metric tags, provider metrics and configuration safety bounds.
+
+LOC-05 is complete and unblocks LOC-06. LOC-02, LOC-06 and LOC-07 remain open,
+so the service is still **not beta-ready**.

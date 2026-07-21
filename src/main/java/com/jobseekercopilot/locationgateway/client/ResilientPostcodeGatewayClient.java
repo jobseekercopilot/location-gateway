@@ -3,6 +3,8 @@ package com.jobseekercopilot.locationgateway.client;
 import com.jobseekercopilot.generated.postcodeiogateway.api.PostcodeApi;
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
 import com.jobseekercopilot.locationgateway.config.PostcodeGatewayProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
@@ -17,38 +19,52 @@ public class ResilientPostcodeGatewayClient {
     private final PostcodeGatewayCircuitBreaker circuitBreaker;
     private final PostcodeGatewayProperties properties;
     private final Sleeper sleeper;
+    private final MeterRegistry meterRegistry;
+    private final Counter retries;
+    private final Counter circuitRejections;
 
     @Autowired
     public ResilientPostcodeGatewayClient(
             PostcodeApi postcodeApi,
             PostcodeGatewayCircuitBreaker circuitBreaker,
-            PostcodeGatewayProperties properties) {
-        this(postcodeApi, circuitBreaker, properties, duration -> Thread.sleep(duration.toMillis()));
+            PostcodeGatewayProperties properties,
+            MeterRegistry meterRegistry) {
+        this(postcodeApi, circuitBreaker, properties, meterRegistry,
+                duration -> Thread.sleep(duration.toMillis()));
     }
 
     ResilientPostcodeGatewayClient(
             PostcodeApi postcodeApi,
             PostcodeGatewayCircuitBreaker circuitBreaker,
             PostcodeGatewayProperties properties,
+            MeterRegistry meterRegistry,
             Sleeper sleeper) {
         properties.validate();
         this.postcodeApi = postcodeApi;
         this.circuitBreaker = circuitBreaker;
         this.properties = properties;
+        this.meterRegistry = meterRegistry;
         this.sleeper = sleeper;
+        this.retries = Counter.builder("location.postcode.provider.retries").register(meterRegistry);
+        this.circuitRejections = Counter.builder("location.postcode.provider.circuit.rejections")
+                .register(meterRegistry);
     }
 
     public PostcodeLocation lookup(String postcode) {
         if (!circuitBreaker.tryAcquirePermission()) {
+            circuitRejections.increment();
             throw new PostcodeGatewayCircuitOpenException();
         }
 
         for (int attempt = 1; attempt <= properties.getMaxAttempts(); attempt++) {
+            long startedAt = System.nanoTime();
             try {
                 PostcodeLocation result = postcodeApi.getLocationByPostcode(postcode);
+                recordProviderRequest(startedAt, "success");
                 circuitBreaker.recordSuccess();
                 return result;
             } catch (RestClientException exception) {
+                recordProviderRequest(startedAt, outcome(exception));
                 boolean retryable = isRetryable(exception);
                 if (!retryable) {
                     if (isCircuitFailure(exception)) {
@@ -62,10 +78,28 @@ public class ResilientPostcodeGatewayClient {
                     circuitBreaker.recordFailure();
                     throw exception;
                 }
+                retries.increment();
                 sleep(backoff(attempt));
             }
         }
         throw new IllegalStateException("Postcode gateway retry loop ended unexpectedly.");
+    }
+
+    private void recordProviderRequest(long startedAt, String outcome) {
+        meterRegistry.timer("location.postcode.provider.requests", "outcome", outcome)
+                .record(Duration.ofNanos(System.nanoTime() - startedAt));
+    }
+
+    private String outcome(RestClientException exception) {
+        if (exception instanceof ResourceAccessException) {
+            return "transport_error";
+        }
+        if (exception instanceof RestClientResponseException responseException) {
+            return responseException.getStatusCode().is5xxServerError()
+                    ? "server_error"
+                    : "client_error";
+        }
+        return "invalid_response";
     }
 
     private boolean isRetryable(RestClientException exception) {

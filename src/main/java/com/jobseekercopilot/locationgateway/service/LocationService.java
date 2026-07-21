@@ -2,6 +2,7 @@ package com.jobseekercopilot.locationgateway.service;
 
 import com.jobseekercopilot.locationgateway.client.PostcodeGatewayCircuitOpenException;
 import com.jobseekercopilot.locationgateway.client.ResilientPostcodeGatewayClient;
+import com.jobseekercopilot.locationgateway.cache.LocationLookupCache;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
 import com.jobseekercopilot.locationgateway.validation.PostcodeValidator;
@@ -21,11 +22,18 @@ public class LocationService {
     private static final Logger log = LoggerFactory.getLogger(LocationService.class);
 
     private final ResilientPostcodeGatewayClient postcodeGatewayClient;
+    private final LocationLookupCache locationLookupCache;
 
     public Location getLocationFromPostcodeIo(String postcode) {
         String canonicalPostcode = PostcodeValidator.canonicalise(postcode);
         long startedAt = System.nanoTime();
         log.info("Location lookup started");
+        var cached = locationLookupCache.get(canonicalPostcode);
+        if (cached.isPresent()) {
+            log.info("Location lookup completed cacheHit=true durationMs={}",
+                    (System.nanoTime() - startedAt) / 1_000_000);
+            return cached.get();
+        }
         var result = lookup(canonicalPostcode);
 
         String region = result.getRegion();
@@ -46,7 +54,8 @@ public class LocationService {
             result.getLatitude(),
             result.getLongitude()
         );
-        log.info("Location lookup completed regionPresent={} adminDistrictPresent={} durationMs={}",
+        locationLookupCache.put(canonicalPostcode, location);
+        log.info("Location lookup completed cacheHit=false regionPresent={} adminDistrictPresent={} durationMs={}",
                 region != null && !region.isBlank(),
                 adminDistrict != null && !adminDistrict.isBlank(),
                 (System.nanoTime() - startedAt) / 1_000_000);
