@@ -1,6 +1,8 @@
 package com.jobseekercopilot.locationgateway;
 
 import com.jobseekercopilot.locationgateway.controller.LocationController;
+import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
+import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
 import com.jobseekercopilot.locationgateway.service.LocationService;
 import org.junit.jupiter.api.Test;
@@ -8,6 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.RestClientException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -45,24 +49,53 @@ class LocationControllerIntegrationTest {
                 .andExpect(jsonPath("$.statusCode").value(200))
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message")
-                        .value("Retrieved location for postcode LS1."))
+                        .value("Location retrieved."))
                 .andExpect(jsonPath("$.locations", hasSize(1)))
                 .andExpect(jsonPath("$.locations[0].id")
                         .value("LS1"));
     }
 
     @Test
-    void testGetLocationByPostcode_error() throws Exception {
+    void invalidPostcodeReturnsStableBadRequestWithoutEchoingInput() throws Exception {
 
         when(locationService.getLocationFromPostcodeIo("INVALID"))
-                .thenThrow(new RuntimeException("Postcode not found"));
+                .thenThrow(new InvalidPostcodeException());
 
         mockMvc.perform(get("/api/postcodes/INVALID")
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.statusCode").value(500))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.statusCode").value(400))
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message")
-                        .value("Error retrieving location for postcode INVALID: Postcode not found"));
+                .andExpect(jsonPath("$.message").value("Invalid postcode or outcode."))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("INVALID"))))
+                .andExpect(jsonPath("$.locations", hasSize(0)));
+    }
+
+    @Test
+    void providerStatusIsReturnedWithStableMessageWithoutLeakingCause() throws Exception {
+        when(locationService.getLocationFromPostcodeIo("SW1A1AA"))
+                .thenThrow(new LocationLookupException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        new RestClientException("secret downstream body for SW1A1AA")
+                ));
+
+        mockMvc.perform(get("/api/postcodes/SW1A1AA")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.statusCode").value(503))
+                .andExpect(jsonPath("$.message").value("Location service is temporarily unavailable."))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("secret downstream body"))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("SW1A1AA"))));
+    }
+
+    @Test
+    void unacceptableResponseContentTypeReturnsStableJsonError() throws Exception {
+        mockMvc.perform(get("/api/postcodes/LS1")
+                        .accept(MediaType.TEXT_PLAIN))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(content().string(""));
     }
 }

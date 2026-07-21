@@ -3,9 +3,10 @@
 Audit date: 18 July 2026
 
 Status: **Not beta-ready.** LOC-01 now generates the postcode client from a
-versioned consumer contract and clean builds no longer require an untracked
-JAR. The UI-advertised general search route does not exist, and the remaining
-validation, resilience, testing and operational findings still block beta.
+versioned consumer contract, LOC-03 validates postcode input and preserves safe
+error semantics, and clean builds no longer require an untracked JAR. The
+UI-advertised general search route does not exist, and the remaining resilience,
+testing and operational findings still block beta.
 
 ## Findings
 
@@ -52,5 +53,22 @@ At completion of LOC-01, LOC-02 through LOC-08 remained open.
   missing, invalid, or expired risk-exception metadata. Full details are in
   `docs/DEPENDENCY_SECURITY.md`.
 
-This resolves LOC-08 only. LOC-02 through LOC-07 remain open, so the service is
+At completion of LOC-08, LOC-02 through LOC-07 remained open and the service was
 still **not beta-ready**.
+
+## LOC-03 remediation evidence
+
+- UK postcodes and outcodes are whitespace-normalised, upper-cased and checked
+  against bounded UK formats before a downstream request is made.
+- Provider `400`, `404`, `429`, `502`, `503` and `504` responses are mapped to
+  stable public errors; timeouts and unexpected provider responses have explicit
+  gateway semantics.
+- Responses do not echo submitted postcodes or downstream exception bodies, and
+  request logging replaces the postcode path segment with `{postcode}`.
+- MVC and service tests cover success, invalid input, every required provider
+  status, connection/client failures, malformed-body/content-type handlers and
+  log-path redaction. The checked-in consumer contract records the reviewed
+  postcode gateway revision.
+
+This resolves LOC-03 only. LOC-02 and LOC-04 through LOC-07 remain open, so the
+service is still **not beta-ready**.
