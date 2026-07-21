@@ -4,11 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.jobseekercopilot.generated.postcodeiogateway.api.PostcodeApi;
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
+import com.jobseekercopilot.generated.postcodeiogateway.model.PlaceLocation;
 import com.jobseekercopilot.locationgateway.config.PostcodeGatewayProperties;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -20,8 +22,67 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 
 class ResilientPostcodeGatewayClientTest {
+
+    @Test
+    void searchesPlacesThroughTheSameBoundedResilienceAndTelemetryPath() {
+        PostcodeApi api = mock(PostcodeApi.class);
+        var expected = new com.jobseekercopilot.generated.postcodeiogateway.model.PlaceLocation();
+        expected.setId("place-1");
+        expected.setName("Leeds");
+        expected.setPostcode("LS1");
+        expected.setRegion("Yorkshire and The Humber");
+        expected.setLatitude(53.8008);
+        expected.setLongitude(-1.5491);
+        when(api.searchPlaces("Leeds", 10))
+                .thenThrow(new HttpServerErrorException(HttpStatus.SERVICE_UNAVAILABLE))
+                .thenReturn(List.of(expected));
+        PostcodeGatewayProperties properties = properties();
+        SimpleMeterRegistry metrics = new SimpleMeterRegistry();
+        List<Duration> sleeps = new ArrayList<>();
+        ResilientPostcodeGatewayClient client = new ResilientPostcodeGatewayClient(
+                api,
+                new PostcodeGatewayCircuitBreaker(properties, new AtomicLong()::get),
+                properties,
+                metrics,
+                sleeps::add);
+
+        assertEquals(List.of(expected), client.searchPlaces("Leeds", 10));
+        verify(api, times(2)).searchPlaces("Leeds", 10);
+        assertEquals(List.of(Duration.ofMillis(10)), sleeps);
+        assertEquals(1, metrics.get("location.postcode.provider.retries").counter().count());
+    }
+
+    @Test
+    void rejectsMalformedOrExcessivePlaceResponses() {
+        PostcodeApi api = mock(PostcodeApi.class);
+        PlaceLocation incomplete = new PlaceLocation();
+        incomplete.setId("place-1");
+        when(api.searchPlaces("Leeds", 10)).thenReturn(List.of(incomplete));
+        ResilientPostcodeGatewayClient client = client(
+                api, properties(), new AtomicLong(), duration -> { });
+
+        assertThrows(RestClientException.class, () -> client.searchPlaces("Leeds", 10));
+        verify(api).searchPlaces("Leeds", 10);
+
+        List<PlaceLocation> excessive = new ArrayList<>();
+        for (int index = 0; index < 11; index++) {
+            PlaceLocation place = new PlaceLocation();
+            place.setId("place-" + index);
+            place.setName("Leeds");
+            place.setPostcode("LS1");
+            place.setRegion("Yorkshire and The Humber");
+            place.setLatitude(53.8);
+            place.setLongitude(-1.5);
+            excessive.add(place);
+        }
+        when(api.searchPlaces("York", 10)).thenReturn(excessive);
+
+        assertThrows(RestClientException.class, () -> client.searchPlaces("York", 10));
+        verify(api).searchPlaces("York", 10);
+    }
 
     @Test
     void retriesOneSafeTransientFailureWithBoundedBackoff() {

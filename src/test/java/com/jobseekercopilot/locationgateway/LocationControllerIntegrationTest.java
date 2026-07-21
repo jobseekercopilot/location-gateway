@@ -2,13 +2,17 @@ package com.jobseekercopilot.locationgateway;
 
 import com.jobseekercopilot.locationgateway.controller.LocationController;
 import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
+import com.jobseekercopilot.locationgateway.exception.InvalidPlaceSearchException;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
 import com.jobseekercopilot.locationgateway.ratelimit.CallerRateLimiter;
 import com.jobseekercopilot.locationgateway.ratelimit.LocationRateLimitException;
 import com.jobseekercopilot.locationgateway.service.LocationService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
@@ -23,7 +27,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(LocationController.class)
+@WebMvcTest(value = LocationController.class, properties = "debug=true")
+@ExtendWith(OutputCaptureExtension.class)
 class LocationControllerIntegrationTest {
 
     @Autowired
@@ -34,6 +39,53 @@ class LocationControllerIntegrationTest {
 
     @MockitoBean
     private CallerRateLimiter callerRateLimiter;
+
+    @Test
+    void searchesLocationsAndReturnsStableEmptySuccess(CapturedOutput output) throws Exception {
+        Location leeds = new Location("place-1", "Leeds", "LS1",
+                "Yorkshire and The Humber", 53.8008, -1.5491);
+        when(locationService.searchLocations("Leeds")).thenReturn(java.util.List.of(leeds));
+
+        mockMvc.perform(get("/api/locations").queryParam("q", "Leeds")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Locations retrieved."))
+                .andExpect(jsonPath("$.locations", hasSize(1)))
+                .andExpect(jsonPath("$.locations[0].id").value("place-1"))
+                .andExpect(jsonPath("$.locations[0].postcode").value("LS1"));
+
+        when(locationService.searchLocations("Nowhere")).thenReturn(java.util.List.of());
+        mockMvc.perform(get("/api/locations").queryParam("q", "Nowhere")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("No matching locations."))
+                .andExpect(jsonPath("$.locations", hasSize(0)));
+
+        org.assertj.core.api.Assertions.assertThat(output)
+                .doesNotContain("q=Leeds")
+                .doesNotContain("q=Nowhere");
+    }
+
+    @Test
+    void invalidPlaceSearchReturnsStableRedacted400() throws Exception {
+        String unsafe = "SECRET?limit=100";
+        when(locationService.searchLocations(unsafe)).thenThrow(new InvalidPlaceSearchException());
+
+        mockMvc.perform(get("/api/locations").queryParam("q", unsafe)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.statusCode").value(400))
+                .andExpect(jsonPath("$.message").value("Invalid place search query."))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString(unsafe))));
+
+        when(locationService.searchLocations(""))
+                .thenThrow(new InvalidPlaceSearchException());
+        mockMvc.perform(get("/api/locations").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid place search query."));
+    }
 
     @Test
     void testGetLocationByPostcode_success() throws Exception {

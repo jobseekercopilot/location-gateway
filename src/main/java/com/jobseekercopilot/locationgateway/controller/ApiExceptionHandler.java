@@ -1,6 +1,7 @@
 package com.jobseekercopilot.locationgateway.controller;
 
 import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
+import com.jobseekercopilot.locationgateway.exception.InvalidPlaceSearchException;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.LocationResponse;
 import com.jobseekercopilot.locationgateway.ratelimit.LocationRateLimitException;
@@ -24,6 +25,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidPostcodeException.class)
     ResponseEntity<LocationResponse> handleInvalidPostcode() {
         return error(HttpStatus.BAD_REQUEST, "Invalid postcode or outcode.");
+    }
+
+    @ExceptionHandler(InvalidPlaceSearchException.class)
+    ResponseEntity<LocationResponse> handleInvalidPlaceSearch() {
+        return error(HttpStatus.BAD_REQUEST, "Invalid place search query.");
     }
 
     @ExceptionHandler(LocationRateLimitException.class)

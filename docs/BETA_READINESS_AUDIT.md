@@ -6,7 +6,7 @@ Status: **Not beta-ready.** LOC-01 now generates the postcode client from a
 versioned consumer contract, LOC-03 validates postcode input and preserves safe
 error semantics, LOC-04 bounds the downstream call, LOC-05 adds bounded
 cache/rate/telemetry controls, and clean builds no longer require an untracked
-JAR. The UI-advertised general search route does not exist, and remaining
+JAR. LOC-02 implements the UI-advertised bounded place-name route. Remaining
 testing and operational findings still block beta.
 
 ## Findings
@@ -14,7 +14,7 @@ testing and operational findings still block beta.
 | ID | Finding | Evidence | Risk and severity | Recommended solution and acceptance criteria | Dependencies | Beta blocker | Effort |
 |---|---|---|---|---|---|---|---|
 | [LOC-01](https://github.com/jobseekercopilot/location-gateway/issues/1) | Replace the postcode client `systemPath` JAR | `pom.xml` points at `libs/postcode-io-gateway-client-1.0.0.jar`; `libs/` is excluded. | **Critical / P0 build:** a fresh clone cannot compile. | Publish/generate a versioned client from an owned contract; remove `systemPath`; verify clean-clone build and contract compatibility. | Postcode contract/publishing. | Yes | L |
-| [LOC-02](https://github.com/jobseekercopilot/location-gateway/issues/2) | Implement or remove location-name search | Client and README use `GET /api/locations?q=`, but controller only maps `/api/postcodes/{postcode}`. | **High / P1 functional:** location suggestions fail for names/partial input. | Agree provider/API ownership; implement bounded search or remove the feature/contract; test partial, empty and no-result cases. | Client decision/provider capability. | Yes | M |
+| [LOC-02](https://github.com/jobseekercopilot/location-gateway/issues/2) | Implement or remove location-name search | **Remediated:** `/api/locations?q=` validates a bounded place name, requests at most ten results through a versioned postcode-gateway contract, and preserves stable redacted errors. | The broken advertised route is restored; the unversioned provider and absent browser suite remain documented risks. | Retain provider/consumer contract, validation, zero/multiple/error tests and deterministic cross-service smoke. | Postcode-io-gateway place endpoint and official provider capability. | No | M |
 | [LOC-03](https://github.com/jobseekercopilot/location-gateway/issues/3) | Validate postcode input and map provider errors | Controller accepts unconstrained path text, catches every exception as 500 and includes exception text and postcode in response. | **High / P1 API/security:** invalid/not-found/provider errors are indistinguishable and internal details leak. | Canonicalise and validate UK postcode/outcode; map 400/404/429/502/503/504 to stable errors; avoid echoing unnecessary PII; test malformed JSON/content types. | Postcode error contract. | Yes | M |
 | [LOC-04](https://github.com/jobseekercopilot/location-gateway/issues/4) | Bound the synchronous provider call | **Remediated:** the generated client has validated connect/read deadlines, bounded transient-response retry/backoff, a per-instance circuit and circuit-derived readiness. | The cascading thread-exhaustion risk is bounded; each instance may still observe failures before its local circuit opens. | Retain slow/outage/recovery tests and documented budgets; tune only from measured latency/capacity. | LOC-01, postcode SLO and repository-owned resilience policy. | No | M |
 | [LOC-05](https://github.com/jobseekercopilot/location-gateway/issues/5) | Add cache/rate controls and operational signals | **Remediated:** successful canonical lookups use a TTL/LRU-bounded cache; direct callers have bounded in-memory throttling; safe provider/cache/rate metrics and beta alerts are defined. | The evidenced provider-waste/visibility risk is bounded; instance-local state and direct-caller aggregation are documented residual risks. | Retain normalization/TTL/size/rate/metric privacy tests; tune only from measured capacity and deploy metrics behind authenticated collection. | Existing Micrometer/Actuator approach. | No | M |
@@ -108,3 +108,25 @@ service was still **not beta-ready**.
 
 LOC-05 is complete and unblocks LOC-06. LOC-02, LOC-06 and LOC-07 remain open,
 so the service is still **not beta-ready**.
+
+## LOC-02 remediation evidence
+
+- Postcode-io-gateway owns a bounded LIVE-mode `/api/places` boundary backed
+  by the provider's documented place query; FIXTURE mode fails closed because
+  no approved place dataset exists there.
+- Both gateways enforce a 2–80 character Unicode place-name policy and a fixed
+  maximum of ten results before provider access.
+- The consumer contract maps only bounded place identity, display name,
+  representative outcode, region, administrative district and coordinates;
+  additive fields are accepted and incompatible responses fail closed.
+- Search shares caller throttling, downstream deadlines, retry/circuit controls
+  and low-cardinality provider telemetry. Query text is absent from logs,
+  metric labels and redacted errors.
+- The client BFF transaction log records only the operation and result count;
+  focused tests prove successful and failed search terms are not logged.
+- Focused provider/consumer tests cover normalization, URI query encoding,
+  multiple/empty results, response compatibility, 429 retry, mode safety and
+  stable public mapping. Cross-service evidence is recorded on the issue/PRs.
+
+LOC-02 is complete and unblocks LOC-06 and LOC-07. LOC-06 and LOC-07 remain
+open, so the service is still **not beta-ready**.

@@ -28,6 +28,34 @@ public class LocationController {
     private final LocationService locationService;
     private final CallerRateLimiter callerRateLimiter;
 
+    @GetMapping(value = "/locations", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Search UK places", description = "Returns at most ten matching UK places.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Search completed"),
+            @ApiResponse(responseCode = "400", description = "Invalid place query",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "429", description = "Request or provider rate limited",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "502", description = "Invalid provider response",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "503", description = "Location provider unavailable",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "504", description = "Location provider timed out",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class)))
+    })
+    public ResponseEntity<LocationResponse> searchLocations(
+            @Parameter(description = "Place-name query", required = true, example = "Leeds")
+            @RequestParam(value = "q", defaultValue = "") String query,
+            HttpServletRequest request) {
+        callerRateLimiter.check(request.getRemoteAddr());
+        List<Location> locations = locationService.searchLocations(query);
+        return ResponseEntity.ok(new LocationResponse(
+                200,
+                true,
+                locations.isEmpty() ? "No matching locations." : "Locations retrieved.",
+                locations));
+    }
+
     @GetMapping(value = "/postcodes/{postcode}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
             summary = "Get location by postcode",

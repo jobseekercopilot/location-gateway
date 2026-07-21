@@ -26,6 +26,35 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class PostcodeGatewayContractTest {
 
     @Test
+    void generatedClientCallsBoundedPlaceSearchAndDeserializesAdditiveResponse() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        PostcodeApi postcodeApi = new PostcodeApi(
+                new ApiClient(restTemplate).setBasePath("http://postcode.test"));
+        server.expect(once(), requestTo("http://postcode.test/api/places?q=St%20Albans&limit=2"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        [{
+                          "id":"place-1",
+                          "name":"St Albans",
+                          "postcode":"AL1",
+                          "region":"East of England",
+                          "adminDistrict":"St Albans",
+                          "latitude":51.7527,
+                          "longitude":-0.3394,
+                          "futureField":"ignored"
+                        }]
+                        """, MediaType.APPLICATION_JSON));
+
+        var places = postcodeApi.searchPlaces("St Albans", 2);
+
+        assertEquals(1, places.size());
+        assertEquals("place-1", places.get(0).getId());
+        assertEquals("AL1", places.get(0).getPostcode());
+        server.verify();
+    }
+
+    @Test
     void generatedClientCallsVersionedPathAndDeserializesProviderResponse() {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();

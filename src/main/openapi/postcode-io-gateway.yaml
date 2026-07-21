@@ -4,8 +4,49 @@ info:
   version: 1.0.0
   description: Consumer contract used by location-gateway.
 x-source-repository: jobseekercopilot/postcode-io-gateway
-x-source-revision: 0023433bd5097de9b4e350d6a6977a7bfbc4578c
+x-source-revision: 378427002ad44032d4f7733dbe3ea3cbb8fac3e9
 paths:
+  /api/places:
+    get:
+      tags: [Postcode]
+      operationId: searchPlaces
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Validated UK place-name query
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 80
+        - name: limit
+          in: query
+          required: true
+          description: Maximum number of results
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+      responses:
+        '200':
+          description: Bounded matching places, possibly empty
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 10
+                items:
+                  $ref: '#/components/schemas/PlaceLocation'
+        '400':
+          description: Invalid place query or limit
+        '429':
+          description: Provider rate limited
+        '502':
+          description: Provider returned an invalid response
+        '503':
+          description: Place search unavailable
+        '504':
+          description: Provider timed out
   /api/postcodes/{postcode}:
     get:
       tags: [Postcode]
@@ -40,6 +81,28 @@ paths:
           description: Unexpected postcode service failure
 components:
   schemas:
+    PlaceLocation:
+      type: object
+      required: [id, name, postcode, region, latitude, longitude]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        postcode:
+          type: string
+          description: Representative outward postcode
+        region:
+          type: string
+        adminDistrict:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
     PostcodeLocation:
       type: object
       properties:
