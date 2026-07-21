@@ -7,7 +7,7 @@ and binaries belong under `target/` and must not be committed.
 The contract records the source repository and exact reviewed revision in its
 `x-source-*` fields. To update it:
 
-1. review the postcode gateway controller, response model and exported OpenAPI
+1. review the postcode/place gateway controllers, response models and exported OpenAPI
    at the proposed `develop` revision;
 2. update this consumer contract and `x-source-revision` together;
 3. run `mvn -B clean verify` from a clean clone;

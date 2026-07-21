@@ -2,10 +2,12 @@ package com.jobseekercopilot.locationgateway.client;
 
 import com.jobseekercopilot.generated.postcodeiogateway.api.PostcodeApi;
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
+import com.jobseekercopilot.generated.postcodeiogateway.model.PlaceLocation;
 import com.jobseekercopilot.locationgateway.config.PostcodeGatewayProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -51,6 +53,38 @@ public class ResilientPostcodeGatewayClient {
     }
 
     public PostcodeLocation lookup(String postcode) {
+        return execute(() -> postcodeApi.getLocationByPostcode(postcode));
+    }
+
+    public List<PlaceLocation> searchPlaces(String query, int limit) {
+        return execute(() -> {
+            List<PlaceLocation> result = postcodeApi.searchPlaces(query, limit);
+            if (result == null || result.size() > limit || result.stream().anyMatch(place -> !validPlace(place))) {
+                throw new RestClientException("Postcode gateway returned an invalid place response.");
+            }
+            return List.copyOf(result);
+        });
+    }
+
+    private boolean validPlace(PlaceLocation place) {
+        return place != null
+                && hasText(place.getId(), 128)
+                && hasText(place.getName(), 200)
+                && hasText(place.getPostcode(), 8)
+                && hasText(place.getRegion(), 100)
+                && boundedCoordinate(place.getLatitude(), -90, 90)
+                && boundedCoordinate(place.getLongitude(), -180, 180);
+    }
+
+    private boolean hasText(String value, int maximumLength) {
+        return value != null && !value.isBlank() && value.length() <= maximumLength;
+    }
+
+    private boolean boundedCoordinate(Double value, double minimum, double maximum) {
+        return value != null && Double.isFinite(value) && value >= minimum && value <= maximum;
+    }
+
+    private <T> T execute(ProviderCall<T> providerCall) {
         if (!circuitBreaker.tryAcquirePermission()) {
             circuitRejections.increment();
             throw new PostcodeGatewayCircuitOpenException();
@@ -59,7 +93,7 @@ public class ResilientPostcodeGatewayClient {
         for (int attempt = 1; attempt <= properties.getMaxAttempts(); attempt++) {
             long startedAt = System.nanoTime();
             try {
-                PostcodeLocation result = postcodeApi.getLocationByPostcode(postcode);
+                T result = providerCall.execute();
                 recordProviderRequest(startedAt, "success");
                 circuitBreaker.recordSuccess();
                 return result;
@@ -152,5 +186,10 @@ public class ResilientPostcodeGatewayClient {
     @FunctionalInterface
     interface Sleeper {
         void sleep(Duration duration) throws InterruptedException;
+    }
+
+    @FunctionalInterface
+    private interface ProviderCall<T> {
+        T execute();
     }
 }

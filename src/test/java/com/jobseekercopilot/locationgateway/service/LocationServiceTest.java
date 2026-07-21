@@ -1,6 +1,7 @@
 package com.jobseekercopilot.locationgateway.service;
 
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
+import com.jobseekercopilot.generated.postcodeiogateway.model.PlaceLocation;
 import com.jobseekercopilot.locationgateway.client.PostcodeGatewayCircuitOpenException;
 import com.jobseekercopilot.locationgateway.client.ResilientPostcodeGatewayClient;
 import com.jobseekercopilot.locationgateway.cache.LocationLookupCache;
@@ -39,6 +40,40 @@ class LocationServiceTest {
 
     @InjectMocks
     private LocationService locationService;
+
+    @Test
+    void mapsBoundedCanonicalPlaceSearchWithoutCachingQueryState() {
+        PlaceLocation place = new PlaceLocation();
+        place.setId("place-1");
+        place.setName("St Albans");
+        place.setPostcode("AL1");
+        place.setRegion("East of England");
+        place.setLatitude(51.7527);
+        place.setLongitude(-0.3394);
+        when(postcodeGatewayClient.searchPlaces("St Albans", 10)).thenReturn(java.util.List.of(place));
+
+        java.util.List<Location> locations = locationService.searchLocations("  St   Albans ");
+
+        assertEquals(1, locations.size());
+        assertEquals("place-1", locations.get(0).getId());
+        assertEquals("AL1", locations.get(0).getPostcode());
+        verify(postcodeGatewayClient).searchPlaces("St Albans", 10);
+        verifyNoInteractions(locationLookupCache);
+    }
+
+    @Test
+    void mapsPlaceProviderFailuresWithoutLeakingQuery() {
+        when(postcodeGatewayClient.searchPlaces("Secret Place", 10))
+                .thenThrow(new org.springframework.web.client.HttpServerErrorException(
+                        org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR));
+
+        LocationLookupException exception = assertThrows(
+                LocationLookupException.class,
+                () -> locationService.searchLocations("Secret Place"));
+
+        assertEquals(org.springframework.http.HttpStatus.BAD_GATEWAY, exception.getStatus());
+        assertFalse(exception.getMessage().contains("Secret Place"));
+    }
 
     @Test
     void testGetLocationFromPostcodeIo_success() {

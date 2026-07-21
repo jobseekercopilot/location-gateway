@@ -1,11 +1,11 @@
 # Location Gateway
 
-Spring Boot facade that currently maps a UK postcode/outcode through
-postcode-io-gateway into the client location response.
+Spring Boot facade that maps UK postcode/outcode and bounded place-name queries
+through postcode-io-gateway into the client location response.
 
-> Beta status: not beta-ready. The advertised general search endpoint is
-> absent and testing/operational blockers remain. Downstream calls are bounded
-> and postcode validation/error semantics are stable. See
+> Beta status: not beta-ready. Postcode and place-name behavior are bounded,
+> but testing/operational blockers remain. Downstream calls are bounded and
+> validation/error semantics are stable. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 ## Requirements and configuration
@@ -31,9 +31,9 @@ postcode-io-gateway into the client location response.
 - `GET /api/postcodes/{postcode}` accepts a valid UK postcode or outcode,
   canonicalises it before lookup, and returns stable `400`, `404`, `429`,
   `502`, `503` and `504` errors.
+- `GET /api/locations?q={place-name}` accepts a restricted 2–80 character
+  query and returns at most ten matches through the same safe failure policy.
 - `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`, `/actuator/metrics`
-
-`GET /api/locations?q=` is not implemented; LOC-02 owns that decision.
 
 ```bash
 mvn -B clean verify
@@ -53,6 +53,10 @@ is pinned, output stays under `target/generated-sources`, and neither a sibling
 checkout nor `libs/*.jar` is required. See the
 [contract update procedure](src/main/openapi/README.md) before changing the
 provider API. Do not commit generated Java or client binaries.
+
+See [bounded place-name search](docs/LOCATION_SEARCH.md) for the provider/public
+contracts, validation, privacy, deterministic test approach and residual
+coverage limitations.
 
 Successful lookups use a bounded in-memory cache keyed only by the canonical
 postcode/outcode. Direct callers have a bounded fixed-window capacity limit;

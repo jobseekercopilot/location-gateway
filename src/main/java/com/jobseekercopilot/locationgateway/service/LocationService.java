@@ -6,6 +6,9 @@ import com.jobseekercopilot.locationgateway.cache.LocationLookupCache;
 import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
 import com.jobseekercopilot.locationgateway.validation.PostcodeValidator;
+import com.jobseekercopilot.locationgateway.validation.PlaceSearchValidator;
+import java.util.List;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +26,26 @@ public class LocationService {
 
     private final ResilientPostcodeGatewayClient postcodeGatewayClient;
     private final LocationLookupCache locationLookupCache;
+
+    public List<Location> searchLocations(String query) {
+        String cleanQuery = PlaceSearchValidator.canonicalise(query);
+        long startedAt = System.nanoTime();
+        log.info("Location place search started");
+        var results = providerCall(() -> postcodeGatewayClient.searchPlaces(
+                cleanQuery, PlaceSearchValidator.RESULT_LIMIT));
+        List<Location> locations = results.stream()
+                .map(result -> new Location(
+                        result.getId(),
+                        result.getName(),
+                        result.getPostcode(),
+                        result.getRegion(),
+                        result.getLatitude(),
+                        result.getLongitude()))
+                .toList();
+        log.info("Location place search completed resultCount={} durationMs={}",
+                locations.size(), (System.nanoTime() - startedAt) / 1_000_000);
+        return locations;
+    }
 
     public Location getLocationFromPostcodeIo(String postcode) {
         String canonicalPostcode = PostcodeValidator.canonicalise(postcode);
@@ -63,8 +86,12 @@ public class LocationService {
     }
 
     private com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation lookup(String postcode) {
+        return providerCall(() -> postcodeGatewayClient.lookup(postcode));
+    }
+
+    private <T> T providerCall(Supplier<T> call) {
         try {
-            return postcodeGatewayClient.lookup(postcode);
+            return call.get();
         } catch (PostcodeGatewayCircuitOpenException exception) {
             throw new LocationLookupException(HttpStatus.SERVICE_UNAVAILABLE, exception);
         } catch (RestClientResponseException exception) {
