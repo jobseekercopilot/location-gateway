@@ -41,5 +41,5 @@ must allow at least 25 seconds before forcible termination.
 
 Service owners maintain application controls, signal contracts and runbooks.
 Platform owners maintain private collection, resource limits, network policy,
-scan operations and alert delivery. LOC-06 and the blocked client completion of
-LOC-02 remain separate end-to-end evidence risks.
+scan operations and alert delivery. POSTCODE-06 provider-boundary and CLIENT-07
+browser/system validation remain separate end-to-end evidence risks.
