@@ -44,6 +44,11 @@ mvn -B clean verify
 mvn spring-boot:run
 ```
 
+The full verification includes a loopback-only application integration suite
+that exercises the public HTTP API through the real generated postcode client.
+It never calls Postcodes.io. See the [testing runbook](docs/TESTING.md) for the
+scenario matrix, focused commands, fixture rules and cross-service ownership.
+
 Release-shaped container verification runs the full suite before copying the
 verified JAR into a digest-pinned image. The runtime is read-only, uses fixed
 UID/GID `10001:10001`, supports graceful shutdown and receives a blocking

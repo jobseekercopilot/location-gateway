@@ -1,13 +1,14 @@
 # Beta-readiness audit: location gateway
 
-Audit date: 18 July 2026
+Audit date: 18 July 2026; evidence updated 22 July 2026
 
 Status: **Not beta-ready.** LOC-01 now generates the postcode client from a
 versioned consumer contract, LOC-03 validates postcode input and preserves safe
 error semantics, LOC-04 bounds the downstream call, LOC-05 adds bounded
-cache/rate/telemetry controls, LOC-07 hardens runtime operations, and clean builds no longer require an untracked
-JAR. LOC-02 implements the UI-advertised bounded place-name route. Remaining
-testing and operational findings still block beta.
+cache/rate/telemetry controls, LOC-06 verifies the complete application wiring,
+LOC-07 hardens runtime operations, and clean builds no longer require an
+untracked JAR. LOC-02 implements the UI-advertised bounded place-name route.
+Cross-service, browser and controlled-environment evidence still block beta.
 
 ## Findings
 
@@ -18,7 +19,7 @@ testing and operational findings still block beta.
 | [LOC-03](https://github.com/jobseekercopilot/location-gateway/issues/3) | Validate postcode input and map provider errors | Controller accepts unconstrained path text, catches every exception as 500 and includes exception text and postcode in response. | **High / P1 API/security:** invalid/not-found/provider errors are indistinguishable and internal details leak. | Canonicalise and validate UK postcode/outcode; map 400/404/429/502/503/504 to stable errors; avoid echoing unnecessary PII; test malformed JSON/content types. | Postcode error contract. | Yes | M |
 | [LOC-04](https://github.com/jobseekercopilot/location-gateway/issues/4) | Bound the synchronous provider call | **Remediated:** the generated client has validated connect/read deadlines, bounded transient-response retry/backoff, a per-instance circuit and circuit-derived readiness. | The cascading thread-exhaustion risk is bounded; each instance may still observe failures before its local circuit opens. | Retain slow/outage/recovery tests and documented budgets; tune only from measured latency/capacity. | LOC-01, postcode SLO and repository-owned resilience policy. | No | M |
 | [LOC-05](https://github.com/jobseekercopilot/location-gateway/issues/5) | Add cache/rate controls and operational signals | **Remediated:** successful canonical lookups use a TTL/LRU-bounded cache; direct callers have bounded in-memory throttling; safe provider/cache/rate metrics and beta alerts are defined. | The evidenced provider-waste/visibility risk is bounded; instance-local state and direct-caller aggregation are documented residual risks. | Retain normalization/TTL/size/rate/metric privacy tests; tune only from measured capacity and deploy metrics behind authenticated collection. | Existing Micrometer/Actuator approach. | No | M |
-| [LOC-06](https://github.com/jobseekercopilot/location-gateway/issues/6) | Add meaningful contract/integration testing | Four tests cover a happy service mapping, controller shape and OpenAPI; no invalid/outage/rate/timeout/contract tests exist. | **High / P1 testing:** resilience/error semantics are unproven. | Add contract plus provider-stub integration tests for full postcode and all negative scenarios; include browser E2E. | LOC-01–05. | Yes | M |
+| [LOC-06](https://github.com/jobseekercopilot/location-gateway/issues/6) | Add meaningful contract/integration testing | **Remediated:** real public HTTP now traverses production wiring and the generated client into a deterministic loopback provider boundary across success, failure, cache and throttle scenarios. | Application wiring and location-layer failure semantics are proven; POSTCODE-06 cross-service provider evidence and CLIENT-07 browser evidence remain separately owned. | Retain the loopback application matrix, generated-client compatibility suite and runbook; consume this boundary in cross-service and browser validation. | LOC-01–05 complete; POSTCODE-06 and CLIENT-07 consume the result. | No | M |
 | [LOC-07](https://github.com/jobseekercopilot/location-gateway/issues/7) | Harden container, readiness and docs | **Remediated:** aggregate circuit-derived readiness, graceful shutdown and a test-enforcing digest-pinned non-root image with blocking image scan and operations runbook are present. | The repository operational baseline is complete; private telemetry export/alert delivery and complete browser evidence remain external blockers. | Retain runtime/readiness/privacy tests and prove alert delivery in the controlled beta environment. | LOC-01 and repository-side LOC-02 behavior complete. | Yes | M |
 | [LOC-08](https://github.com/jobseekercopilot/location-gateway/issues/8) | Establish reliable dependency vulnerability scanning | CI emits `mvn dependency:tree` but performs no vulnerability analysis; no dependable advisory-feed cache or risk-acceptance workflow is configured. | **High / P1 dependency:** vulnerable gateway or HTTP libraries can reach beta without a reliable blocking signal. | Select a proprietary-compatible Maven scanner, configure authenticated/cached advisory data, publish a machine-readable report, fail on unaccepted Critical/High findings and document the risk-acceptance process. | Platform CI and advisory-feed decision. | Yes | M |
 
@@ -141,5 +142,29 @@ so the service is still **not beta-ready**.
   multiple/empty results, response compatibility, 429 retry, mode safety and
   stable public mapping. Cross-service evidence is recorded on the issue/PRs.
 
-LOC-02 is complete and unblocks LOC-06 and LOC-07. LOC-06 and LOC-07 remain
-open, so the service is still **not beta-ready**.
+At completion of LOC-02, LOC-06 remained open, so the service was still
+**not beta-ready**.
+
+## LOC-06 remediation evidence
+
+- A loopback-only JDK HTTP server drives the random-port public API through the
+  real controller, validation/rate control, service/cache/resilience and
+  generated postcode client without external provider access.
+- Full postcode, outcode and place searches prove canonical paths, exact
+  bounded queries, stable response mapping, multiple/empty results, additive
+  field compatibility and safe correlation propagation.
+- Real HTTP failure scenarios prove validation before provider access,
+  terminal `404`, bounded/recovered and exhausted `429`, slow-response `504`,
+  connection-failure/open-circuit `503`, malformed-body `502`, cache reuse and
+  failure non-caching with exact provider call counts.
+- A separate low-capacity application context proves direct-caller throttling
+  rejects forwarded-header spoofing before provider access and supplies a
+  bounded positive `Retry-After` value.
+- Negative-path bodies and captured logs are asserted not to expose submitted
+  location values, downstream response bodies or the internal provider URL.
+- `docs/TESTING.md` records the scenario matrix, reproducible commands, safe
+  fixture rules and explicit POSTCODE-06/CLIENT-07 ownership boundaries.
+
+LOC-06 completes the repository-owned location application boundary. It does
+not complete the real postcode-provider, browser or end-to-end beta criteria,
+so the service remains **not beta-ready**.
