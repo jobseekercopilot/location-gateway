@@ -8,6 +8,10 @@ through postcode-io-gateway into the client location response.
 > validation/error semantics are stable. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
+Location acquisition is an upstream profile concern, not part of provider
+fan-out. That boundary is defined in the Infrastructure
+[Job Search architecture ADR](https://github.com/jobseekercopilot/infrastructure/blob/develop/docs/adr/0001-job-search-architecture-and-ownership.md).
+
 ## Requirements and configuration
 
 - Java 17 and Maven 3.9
