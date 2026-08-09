@@ -1,5 +1,13 @@
 # Location Gateway
 
+## Role in Job Seeker Copilot
+
+| Role | Called by | Calls | Data | Local port |
+|---|---|---|---|---:|
+| Browser-facing UK place/postcode facade with validation, cache and resilience | Client Express BFF | Postcode.io Gateway | None | 8081 |
+
+On `develop`, this gateway does not call `location-service` or Google Maps. See the central [location journey](https://docs.jobseekercopilot.com/journeys/location/) and [service catalogue](https://docs.jobseekercopilot.com/services/catalogue/).
+
 Spring Boot facade that maps UK postcode/outcode and bounded place-name queries
 through postcode-io-gateway into the client location response.
 
