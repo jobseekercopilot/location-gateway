@@ -13,6 +13,7 @@ public class PostcodeGatewayProperties {
     private Duration maxBackoff = Duration.ofMillis(250);
     private int circuitFailureThreshold = 5;
     private Duration circuitOpenDuration = Duration.ofSeconds(30);
+    private String serviceToken;
 
     public void validate() {
         requireBounded(connectTimeout, Duration.ofMillis(1), Duration.ofSeconds(30), "connect timeout");
@@ -23,6 +24,9 @@ public class PostcodeGatewayProperties {
                 "circuit open duration");
         if (url == null || url.isBlank()) {
             throw new IllegalStateException("POSTCODE_IO_GATEWAY_URL must not be blank.");
+        }
+        if (serviceToken == null || serviceToken.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("LOCATION_SERVICE_TOKEN must contain at least 32 bytes.");
         }
         if (maxAttempts < 1 || maxAttempts > 3) {
             throw new IllegalStateException("Postcode gateway max attempts must be between 1 and 3.");
@@ -57,4 +61,6 @@ public class PostcodeGatewayProperties {
     public void setCircuitFailureThreshold(int circuitFailureThreshold) { this.circuitFailureThreshold = circuitFailureThreshold; }
     public Duration getCircuitOpenDuration() { return circuitOpenDuration; }
     public void setCircuitOpenDuration(Duration circuitOpenDuration) { this.circuitOpenDuration = circuitOpenDuration; }
+    public String getServiceToken() { return serviceToken; }
+    public void setServiceToken(String serviceToken) { this.serviceToken = serviceToken; }
 }

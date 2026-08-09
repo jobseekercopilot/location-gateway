@@ -26,6 +26,7 @@ public class PostcodeIoGatewayConfig {
         return new ApiClient(restTemplateBuilder
                 .connectTimeout(properties.getConnectTimeout())
                 .readTimeout(properties.getReadTimeout())
+                .defaultHeader("X-Service-Token", properties.getServiceToken())
                 .build())
                 .setBasePath(properties.getUrl());
     }
