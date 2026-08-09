@@ -20,7 +20,7 @@ class LocationServiceContractPinTest {
                 .isEqualTo("22238272fb50d69c49abb3fda167e41897749c6fb67651c8e3b045d13817a2f5");
         assertThat(pin)
                 .contains("\"contractVersion\": \"1.0.0\"")
-                .contains("\"sourceRevision\": \"1ccaa0c153262ca4dda3c9bac9866bee30c6f3e7\"")
+                .contains("\"sourceRevision\": \"04ccdffe5e958944cfe1f01d5363b0a04b58126e\"")
                 .contains("\"sha256\": \"" + checksum + "\"")
                 .contains("\"generatorVersion\": \"7.24.0\"");
     }

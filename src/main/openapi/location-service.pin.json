@@ -3,7 +3,7 @@
   "repository": "jobseekercopilot/location-service",
   "contractPath": "api/openapi.yaml",
   "contractVersion": "1.0.0",
-  "sourceRevision": "1ccaa0c153262ca4dda3c9bac9866bee30c6f3e7",
+  "sourceRevision": "04ccdffe5e958944cfe1f01d5363b0a04b58126e",
   "sha256": "22238272fb50d69c49abb3fda167e41897749c6fb67651c8e3b045d13817a2f5",
   "generatedClient": {
     "generator": "openapi-generator",
