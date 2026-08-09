@@ -17,6 +17,8 @@ test "$(docker image inspect --format '{{json .Config.Healthcheck.Test}}' "$imag
 
 docker run --detach --name "$service_name" \
     --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+    --env LOCATION_SERVICE_TOKEN=test-only-location-service-token-32-bytes \
+    --env LOCATION_SERVICE_URL=http://127.0.0.1:9 \
     --env POSTCODE_IO_GATEWAY_URL=http://127.0.0.1:9 \
     --env POSTCODE_GATEWAY_CONNECT_TIMEOUT=100ms \
     --env POSTCODE_GATEWAY_READ_TIMEOUT=100ms \
