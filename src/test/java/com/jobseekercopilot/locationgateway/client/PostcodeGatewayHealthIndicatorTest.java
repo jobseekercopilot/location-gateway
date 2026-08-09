@@ -13,6 +13,7 @@ class PostcodeGatewayHealthIndicatorTest {
     @Test
     void readinessReflectsTheCircuitWithoutCallingTheProvider() {
         PostcodeGatewayProperties properties = new PostcodeGatewayProperties();
+        properties.setServiceToken("test-only-location-service-token-32-bytes");
         properties.setCircuitFailureThreshold(1);
         properties.setCircuitOpenDuration(Duration.ofSeconds(1));
         AtomicLong nanoTime = new AtomicLong();

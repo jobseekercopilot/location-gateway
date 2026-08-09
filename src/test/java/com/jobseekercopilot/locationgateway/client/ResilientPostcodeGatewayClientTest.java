@@ -196,6 +196,7 @@ class ResilientPostcodeGatewayClientTest {
 
     private static PostcodeGatewayProperties properties() {
         PostcodeGatewayProperties properties = new PostcodeGatewayProperties();
+        properties.setServiceToken("test-only-location-service-token-32-bytes");
         properties.setMaxAttempts(2);
         properties.setInitialBackoff(Duration.ofMillis(10));
         properties.setMaxBackoff(Duration.ofMillis(20));

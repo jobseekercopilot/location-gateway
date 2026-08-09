@@ -15,6 +15,8 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
 
@@ -69,6 +71,25 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<LocationResponse> handleMissingResource() {
         return error(HttpStatus.NOT_FOUND, "Resource not found.");
+    }
+
+    @ExceptionHandler(RestClientResponseException.class)
+    ResponseEntity<LocationResponse> handleDomainStatus(RestClientResponseException exception) {
+        HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
+        HttpStatus safeStatus = status == null ? HttpStatus.BAD_GATEWAY : status;
+        return error(safeStatus, switch (safeStatus) {
+            case BAD_REQUEST -> "Invalid location request.";
+            case NOT_FOUND -> "Location suggestion expired or was not found.";
+            case CONFLICT -> "A more precise location is required.";
+            case TOO_MANY_REQUESTS -> "Too many location requests. Try again later.";
+            case GATEWAY_TIMEOUT -> "Location service timed out.";
+            default -> "Location service is temporarily unavailable.";
+        });
+    }
+
+    @ExceptionHandler(ResourceAccessException.class)
+    ResponseEntity<LocationResponse> handleDomainTransportFailure() {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "Location service is temporarily unavailable.");
     }
 
     @ExceptionHandler(Exception.class)

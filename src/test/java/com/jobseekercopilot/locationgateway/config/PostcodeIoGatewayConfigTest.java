@@ -31,6 +31,7 @@ class PostcodeIoGatewayConfigTest {
         server.start();
         try {
             PostcodeGatewayProperties properties = new PostcodeGatewayProperties();
+            properties.setServiceToken("test-only-location-service-token-32-bytes");
             properties.setUrl("http://127.0.0.1:" + server.getAddress().getPort());
             properties.setConnectTimeout(Duration.ofMillis(50));
             properties.setReadTimeout(Duration.ofMillis(25));
@@ -47,6 +48,7 @@ class PostcodeIoGatewayConfigTest {
     @Test
     void rejectsUnsafeRetryConfigurationAtStartup() {
         PostcodeGatewayProperties properties = new PostcodeGatewayProperties();
+        properties.setServiceToken("test-only-location-service-token-32-bytes");
         properties.setMaxAttempts(4);
 
         assertThrows(IllegalStateException.class,
