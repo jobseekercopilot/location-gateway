@@ -4,16 +4,20 @@
 
 | Role | Called by | Calls | Data | Local port |
 |---|---|---|---|---:|
-| Browser-facing UK place/postcode facade with validation, cache and resilience | Client Express BFF | Postcode.io Gateway | None | 8081 |
+| Browser-facing UK location facade with validation and rate limits | Client Express BFF | Location Service (including compatibility postcode routes) | None | 8081 |
 
-On `develop`, this gateway does not call `location-service` or Google Maps. See the central [location journey](https://docs.jobseekercopilot.com/journeys/location/) and [service catalogue](https://docs.jobseekercopilot.com/services/catalogue/).
+V2 autocomplete and resolution call `location-service`; the gateway never
+receives the Google credential. The original bounded GET place/postcode routes
+remain as compatibility contracts routed to Location Service. See the central
+[location journey](https://docs.jobseekercopilot.com/journeys/location/) and
+[service catalogue](https://docs.jobseekercopilot.com/services/catalogue/).
 
 Spring Boot facade that maps UK postcode/outcode and bounded place-name queries
-through postcode-io-gateway into the client location response.
+through the provider-neutral Location Service into the client response.
 
-> Beta status: not beta-ready. Postcode and place-name behavior are bounded,
-> but testing/operational blockers remain. Downstream calls are bounded and
-> validation/error semantics are stable. See
+> Delivery status: implemented and composed for controlled private-beta use.
+> Downstream calls are bounded and validation/error semantics are stable;
+> remaining production operational controls are retained in
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 Location acquisition is an upstream profile concern, not part of provider
@@ -23,12 +27,14 @@ fan-out. That boundary is defined in the Infrastructure
 ## Requirements and configuration
 
 - Java 17 and Maven 3.9
-- postcode-io-gateway
+- location-service
 
 | Variable | Local default | Purpose |
 |---|---|---|
 | `SERVER_PORT` | `8081` | HTTP port |
-| `POSTCODE_IO_GATEWAY_URL` | `http://localhost:8082` | Postcode gateway |
+| `LOCATION_SERVICE_URL` | `http://localhost:8104` | Provider-neutral location service |
+| `LOCATION_SERVICE_TOKEN` | none, required | Internal caller identity; at least 32 bytes |
+| `LOCATION_SERVICE_CONNECT_TIMEOUT` / `LOCATION_SERVICE_READ_TIMEOUT` | `500ms` / `5s` | V2/compatibility downstream deadlines |
 | `POSTCODE_GATEWAY_CONNECT_TIMEOUT` / `POSTCODE_GATEWAY_READ_TIMEOUT` | `500ms` / `5s` | Connection and per-attempt response deadlines |
 | `POSTCODE_GATEWAY_MAX_ATTEMPTS` | `2` | Maximum attempts for retryable idempotent responses |
 | `POSTCODE_GATEWAY_INITIAL_BACKOFF` / `POSTCODE_GATEWAY_MAX_BACKOFF` | `100ms` / `250ms` | Bounded retry backoff |
@@ -46,6 +52,8 @@ fan-out. That boundary is defined in the Infrastructure
   `502`, `503` and `504` errors.
 - `GET /api/locations?q={place-name}` accepts a restricted 2–80 character
   query and returns at most ten matches through the same safe failure policy.
+- `POST /api/v2/locations/autocomplete` and `/resolve` expose opaque,
+  provider-attributed v2 sessions through Location Service.
 - `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
 - `/actuator/health/readiness` (aggregate application and downstream-circuit readiness)
 
