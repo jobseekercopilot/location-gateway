@@ -49,7 +49,9 @@ fan-out. That boundary is defined in the Infrastructure
 
 - `GET /api/postcodes/{postcode}` accepts a valid UK postcode or outcode,
   canonicalises it before lookup, and returns stable `400`, `404`, `429`,
-  `502`, `503` and `504` errors.
+  `502`, `503` and `504` errors. It preserves a redacted `422` when a postcode
+  area is outside commercially approved coverage; the postcode itself and the
+  provider response body are never copied into the error message.
 - `GET /api/locations?q={place-name}` accepts a restricted 2–80 character
   query and returns at most ten matches through the same safe failure policy.
 - `POST /api/v2/locations/autocomplete` and `/resolve` expose opaque,

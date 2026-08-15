@@ -4,8 +4,9 @@
 the RestTemplate client during Maven's `generate-sources` phase. Generated Java
 and binaries belong under `target/` and must not be committed.
 
-The contract records the source repository and exact reviewed revision in its
-`x-source-*` fields. To update it:
+The postcode contract records the source repository, exact reviewed revision
+and exported contract checksum in its `x-source-*` fields. The Location Service
+snapshot has the same evidence in `location-service.pin.json`. To update either:
 
 1. review the postcode/place gateway controllers, response models and exported OpenAPI
    at the proposed `develop` revision;

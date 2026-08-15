@@ -109,6 +109,7 @@ public class LocationService {
         return switch (upstreamStatus) {
             case 400 -> HttpStatus.BAD_REQUEST;
             case 404 -> HttpStatus.NOT_FOUND;
+            case 422 -> HttpStatus.UNPROCESSABLE_ENTITY;
             case 408, 504 -> HttpStatus.GATEWAY_TIMEOUT;
             case 429 -> HttpStatus.TOO_MANY_REQUESTS;
             case 503 -> HttpStatus.SERVICE_UNAVAILABLE;

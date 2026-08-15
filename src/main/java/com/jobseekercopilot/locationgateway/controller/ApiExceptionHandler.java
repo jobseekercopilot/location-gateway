@@ -51,6 +51,8 @@ public class ApiExceptionHandler {
         return error(status, switch (status) {
             case BAD_REQUEST -> "Invalid postcode or outcode.";
             case NOT_FOUND -> "Location not found.";
+            case UNPROCESSABLE_CONTENT, UNPROCESSABLE_ENTITY ->
+                    "This postcode area is not currently supported.";
             case TOO_MANY_REQUESTS -> "Too many location requests. Try again later.";
             case SERVICE_UNAVAILABLE -> "Location service is temporarily unavailable.";
             case GATEWAY_TIMEOUT -> "Location service timed out.";
@@ -81,6 +83,8 @@ public class ApiExceptionHandler {
             case BAD_REQUEST -> "Invalid location request.";
             case NOT_FOUND -> "Location suggestion expired or was not found.";
             case CONFLICT -> "A more precise location is required.";
+            case UNPROCESSABLE_CONTENT, UNPROCESSABLE_ENTITY ->
+                    "This postcode area is not currently supported.";
             case TOO_MANY_REQUESTS -> "Too many location requests. Try again later.";
             case GATEWAY_TIMEOUT -> "Location service timed out.";
             default -> "Location service is temporarily unavailable.";

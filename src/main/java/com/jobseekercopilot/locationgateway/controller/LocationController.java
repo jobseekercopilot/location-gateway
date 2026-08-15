@@ -67,6 +67,8 @@ public class LocationController {
                     content = @Content(schema = @Schema(implementation = LocationResponse.class))),
             @ApiResponse(responseCode = "404", description = "Location not found",
                     content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "422", description = "Postcode area is outside approved coverage",
+                    content = @Content(schema = @Schema(implementation = LocationResponse.class))),
             @ApiResponse(responseCode = "429", description = "Request rate limited",
                     content = @Content(schema = @Schema(implementation = LocationResponse.class))),
             @ApiResponse(responseCode = "502", description = "Invalid provider response",

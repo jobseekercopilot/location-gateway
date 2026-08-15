@@ -151,6 +151,27 @@ class LocationControllerIntegrationTest {
     }
 
     @Test
+    void unsupportedPostcodeCoverageIsExplicitAndDoesNotEchoThePostcode() throws Exception {
+        when(locationService.getLocationFromPostcodeIo("BT11AA"))
+                .thenThrow(new LocationLookupException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        new RestClientException("private provider detail for BT11AA")
+                ));
+
+        mockMvc.perform(get("/api/postcodes/BT11AA")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.statusCode").value(422))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message")
+                        .value("This postcode area is not currently supported."))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("BT11AA"))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("private provider detail"))));
+    }
+
+    @Test
     void unacceptableResponseContentTypeReturnsStableJsonError() throws Exception {
         mockMvc.perform(get("/api/postcodes/LS1")
                         .accept(MediaType.TEXT_PLAIN))

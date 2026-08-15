@@ -3,6 +3,8 @@ package com.jobseekercopilot.locationgateway.client;
 import com.jobseekercopilot.generated.postcodeiogateway.api.PostcodeApi;
 import com.jobseekercopilot.generated.postcodeiogateway.client.ApiClient;
 import com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -24,6 +26,19 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class PostcodeGatewayContractTest {
+
+    @Test
+    void consumerContractPinsTheReviewedCoverageGateRelease() throws Exception {
+        String contract = Files.readString(Path.of("src/main/openapi/postcode-io-gateway.yaml"));
+
+        org.assertj.core.api.Assertions.assertThat(contract)
+                .contains("version: 2.0.0")
+                .contains("x-source-revision: f5588e5b0a2ca9e63319674f4b6cd40048b9e0fb")
+                .contains("x-source-contract-sha256: "
+                        + "8321009c305d2d22986224e366df6f0b451c1b5587d05dd0ec4876441e09d7ff")
+                .contains("'422':")
+                .contains("Postcode area is outside approved coverage");
+    }
 
     @Test
     void generatedClientCallsBoundedPlaceSearchAndDeserializesAdditiveResponse() {
@@ -99,7 +114,7 @@ class PostcodeGatewayContractTest {
 
     @ParameterizedTest
     @EnumSource(value = HttpStatus.class, names = {
-            "BAD_REQUEST", "NOT_FOUND", "TOO_MANY_REQUESTS", "BAD_GATEWAY",
+            "BAD_REQUEST", "NOT_FOUND", "UNPROCESSABLE_ENTITY", "TOO_MANY_REQUESTS", "BAD_GATEWAY",
             "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"
     })
     void generatedClientPreservesDocumentedProviderErrorStatus(HttpStatus status) {

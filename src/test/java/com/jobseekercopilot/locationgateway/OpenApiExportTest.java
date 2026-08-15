@@ -23,7 +23,7 @@ class OpenApiExportTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target/openapi.json"), spec);
-        for (String responseStatus : new String[]{"400", "404", "429", "502", "503", "504"}) {
+        for (String responseStatus : new String[]{"400", "404", "422", "429", "502", "503", "504"}) {
             assertTrue(spec.contains("\"" + responseStatus + "\""),
                     () -> "OpenAPI is missing response status " + responseStatus);
         }
