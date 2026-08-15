@@ -210,6 +210,7 @@ class LocationServiceTest {
         return Stream.of(
                 Arguments.of(HttpStatus.BAD_REQUEST, HttpStatus.BAD_REQUEST),
                 Arguments.of(HttpStatus.NOT_FOUND, HttpStatus.NOT_FOUND),
+                Arguments.of(HttpStatus.UNPROCESSABLE_ENTITY, HttpStatus.UNPROCESSABLE_ENTITY),
                 Arguments.of(HttpStatus.REQUEST_TIMEOUT, HttpStatus.GATEWAY_TIMEOUT),
                 Arguments.of(HttpStatus.TOO_MANY_REQUESTS, HttpStatus.TOO_MANY_REQUESTS),
                 Arguments.of(HttpStatus.INTERNAL_SERVER_ERROR, HttpStatus.BAD_GATEWAY),

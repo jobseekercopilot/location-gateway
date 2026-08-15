@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Job Seeker Copilot Location Service Internal API
-  version: 1.0.0
+  version: 1.1.0
   description: Provider-neutral internal location normalisation and transient commute routing.
 servers:
   - url: http://location-service:8104
@@ -31,6 +31,8 @@ paths:
         '400':
           $ref: '#/components/responses/Error'
         '401':
+          $ref: '#/components/responses/Error'
+        '422':
           $ref: '#/components/responses/Error'
         '429':
           $ref: '#/components/responses/Error'
@@ -65,6 +67,8 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
         '502':
           $ref: '#/components/responses/Error'
         '503':
@@ -95,6 +99,8 @@ paths:
         '401':
           $ref: '#/components/responses/Error'
         '404':
+          $ref: '#/components/responses/Error'
+        '422':
           $ref: '#/components/responses/Error'
         '502':
           $ref: '#/components/responses/Error'
@@ -418,4 +424,3 @@ components:
     TravelMode:
       type: string
       enum: [DRIVE, TRANSIT]
-

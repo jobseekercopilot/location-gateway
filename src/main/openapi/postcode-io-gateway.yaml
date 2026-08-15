@@ -1,10 +1,11 @@
 openapi: 3.0.1
 info:
   title: Jobseeker Copilot - Postcode.io Gateway API
-  version: 1.0.0
+  version: 2.0.0
   description: Consumer contract used by location-gateway.
 x-source-repository: jobseekercopilot/postcode-io-gateway
-x-source-revision: 378427002ad44032d4f7733dbe3ea3cbb8fac3e9
+x-source-revision: f5588e5b0a2ca9e63319674f4b6cd40048b9e0fb
+x-source-contract-sha256: 8321009c305d2d22986224e366df6f0b451c1b5587d05dd0ec4876441e09d7ff
 paths:
   /api/places:
     get:
@@ -69,6 +70,8 @@ paths:
           description: Invalid UK postcode or outcode
         '404':
           description: Postcode not found
+        '422':
+          description: Postcode area is outside approved coverage
         '429':
           description: Provider rate limited
         '502':

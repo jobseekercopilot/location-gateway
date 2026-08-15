@@ -173,6 +173,24 @@ class LocationGatewayApplicationIntegrationTest {
     }
 
     @Test
+    void unsupportedCoverageIsNotRetriedAndProviderDetailIsRedacted(CapturedOutput output) {
+        PROVIDER.enqueue(StubResponse.json(
+                422,
+                "{\"code\":\"POSTCODE_COVERAGE_UNSUPPORTED\",\"message\":\"private BT detail\"}"));
+
+        ResponseEntity<Map> response = get("/api/postcodes/BT11AA");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getBody())
+                .containsEntry("statusCode", 422)
+                .containsEntry("success", false)
+                .containsEntry("message", "This postcode area is not currently supported.");
+        assertThat(response.getBody().toString()).doesNotContain("BT11AA", "private");
+        assertThat(PROVIDER.requestCount()).isEqualTo(1);
+        assertThat(output).doesNotContain("BT11AA").doesNotContain("private BT detail");
+    }
+
+    @Test
     void transientRateLimitRetriesOnceAndReturnsRecoveredResult() {
         PROVIDER.enqueue(
                 StubResponse.json(429, "{\"message\":\"retry\"}"),
