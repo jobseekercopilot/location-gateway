@@ -1,203 +1,122 @@
 # Location Gateway
 
-A Spring Boot REST API for UK location and postcode lookups, built with Java 17 and Spring Boot 3.2.0.
+## Role in Job Seeker Copilot
 
-## Features
+| Role | Called by | Calls | Data | Local port |
+|---|---|---|---|---:|
+| Browser-facing UK location facade with validation and rate limits | Client Express BFF | Location Service (including compatibility postcode routes) | None | 8081 |
 
-- **Location Search**: Search for UK locations by query string
-- **Postcode Lookup**: Retrieve location details from UK postcodes using the Postcode.io API
-- **Reactive Support**: Built with Spring WebFlux for asynchronous operations
-- **Health Monitoring**: Spring Boot Actuator endpoints included
+V2 autocomplete and resolution call `location-service`; the gateway never
+receives the Google credential. The original bounded GET place/postcode routes
+remain as compatibility contracts routed to Location Service. See the central
+[location journey](https://docs.jobseekercopilot.com/journeys/location/) and
+[service catalogue](https://docs.jobseekercopilot.com/services/catalogue/).
 
-## Technology Stack
+Spring Boot facade that maps UK postcode/outcode and bounded place-name queries
+through the provider-neutral Location Service into the client response.
 
-- **Java 17**
-- **Spring Boot 3.2.0**
-- **Spring Web MVC** - REST API endpoints
-- **Spring WebFlux** - Reactive programming support
-- **Spring Boot Actuator** - Health and monitoring endpoints
-- **Lombok** - Boilerplate code reduction
-- **Maven** - Build and dependency management
+> Delivery status: implemented and composed for controlled private-beta use.
+> Downstream calls are bounded and validation/error semantics are stable;
+> remaining production operational controls are retained in
+> [the audit](docs/BETA_READINESS_AUDIT.md).
 
-## API Endpoints
+Location acquisition is an upstream profile concern, not part of provider
+fan-out. That boundary is defined in the Infrastructure
+[Job Search architecture ADR](https://github.com/jobseekercopilot/infrastructure/blob/develop/docs/adr/0001-job-search-architecture-and-ownership.md).
 
-### Search Locations
-```
-GET /api/locations?q={query}
-```
-Search for UK locations by name or partial match.
+## Requirements and configuration
 
-**Example:**
-```bash
-curl "http://localhost:8080/api/locations?q=London"
-```
+- Java 17 and Maven 3.9
+- location-service
 
-**Response:**
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Retrieved 5 matching UK locations.",
-  "data": [
-    {
-      "name": "London",
-      "region": "London",
-      "country": "England"
-    }
-  ]
-}
-```
+| Variable | Local default | Purpose |
+|---|---|---|
+| `SERVER_PORT` | `8081` | HTTP port |
+| `LOCATION_SERVICE_URL` | `http://localhost:8104` | Provider-neutral location service |
+| `LOCATION_SERVICE_TOKEN` | none, required | Internal caller identity; at least 32 bytes |
+| `LOCATION_SERVICE_CONNECT_TIMEOUT` / `LOCATION_SERVICE_READ_TIMEOUT` | `500ms` / `5s` | V2/compatibility downstream deadlines |
+| `POSTCODE_GATEWAY_CONNECT_TIMEOUT` / `POSTCODE_GATEWAY_READ_TIMEOUT` | `500ms` / `5s` | Connection and per-attempt response deadlines |
+| `POSTCODE_GATEWAY_MAX_ATTEMPTS` | `2` | Maximum attempts for retryable idempotent responses |
+| `POSTCODE_GATEWAY_INITIAL_BACKOFF` / `POSTCODE_GATEWAY_MAX_BACKOFF` | `100ms` / `250ms` | Bounded retry backoff |
+| `POSTCODE_GATEWAY_CIRCUIT_FAILURE_THRESHOLD` / `POSTCODE_GATEWAY_CIRCUIT_OPEN_DURATION` | `5` / `30s` | Failed logical calls before open and recovery-probe delay |
+| `LOCATION_CACHE_TTL` / `LOCATION_CACHE_MAXIMUM_ENTRIES` | `15m` / `10000` | Successful normalized postcode cache lifetime and per-instance bound |
+| `LOCATION_RATE_MAXIMUM_REQUESTS` / `LOCATION_RATE_WINDOW` | `120` / `1m` | Requests allowed per direct caller and fixed window |
+| `LOCATION_RATE_MAXIMUM_TRACKED_CALLERS` | `20000` | Bounded per-instance caller state |
+| `APP_LOG_LEVEL` | `INFO` | Application log level |
+| `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE` | `health,info` | Actuator endpoints; metrics require an approved private operations network |
 
-### Get Location by Postcode
-```
-GET /api/postcodes/{postcode}
-```
-Retrieve location details for a specific UK postcode using the Postcode.io API.
+## API, health and build
 
-**Example:**
-```bash
-curl "http://localhost:8080/api/postcodes/SW1A1AA"
-```
-
-**Response:**
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Retrieved location for postcode SW1A1AA.",
-  "data": [
-    {
-      "postcode": "SW1A 1AA",
-      "latitude": 51.5035,
-      "longitude": -0.1277,
-      "region": "London",
-      "country": "England"
-    }
-  ]
-}
-```
-
-## Building the Project
-
-### Prerequisites
-
-- Java 17 or higher
-- Maven 3.6+
-
-### Build Commands
+- `GET /api/postcodes/{postcode}` accepts a valid UK postcode or outcode,
+  canonicalises it before lookup, and returns stable `400`, `404`, `429`,
+  `502`, `503` and `504` errors. It preserves a redacted `422` when a postcode
+  area is outside commercially approved coverage; the postcode itself and the
+  provider response body are never copied into the error message.
+- `GET /api/locations?q={place-name}` accepts a restricted 2–80 character
+  query and returns at most ten matches through the same safe failure policy.
+- `POST /api/v2/locations/autocomplete` and `/resolve` expose opaque,
+  provider-attributed v2 sessions through Location Service.
+- `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
+- `/actuator/health/readiness` (aggregate application and downstream-circuit readiness)
 
 ```bash
-# Clean and compile
-mvn clean compile
-
-# Run tests
-mvn test
-
-# Package the application
-mvn clean package
-
-# Run the application
+mvn -B clean verify
+./scripts/test-dependency-report-policy.sh
+./scripts/verify-container.sh
 mvn spring-boot:run
 ```
 
-## Running the Application
+The full verification includes a loopback-only application integration suite
+that exercises the public HTTP API through the real generated postcode client.
+It never calls Postcodes.io. See the [testing runbook](docs/TESTING.md) for the
+scenario matrix, focused commands, fixture rules and cross-service ownership.
 
-The application will start on `http://localhost:8080` by default.
+Release-shaped container verification runs the full suite before copying the
+verified JAR into a digest-pinned image. The runtime is read-only, uses fixed
+UID/GID `10001:10001`, supports graceful shutdown and receives a blocking
+Critical/High image scan in CI. See [service operations](docs/OPERATIONS.md).
 
-### Configuration
+CI scans the resolved runtime dependency set with pinned Trivy releases,
+publishes the JSON report, and rejects unaccepted Critical or High findings.
+See [dependency security](docs/DEPENDENCY_SECURITY.md) for local reproduction,
+scanner scope, and the time-bounded exception process.
 
-Application properties can be configured in `src/main/resources/application.properties`.
+Maven generates the postcode RestTemplate client from the versioned consumer
+contract at `src/main/openapi/postcode-io-gateway.yaml`. OpenAPI Generator 7.24.0
+is pinned, output stays under `target/generated-sources`, and neither a sibling
+checkout nor `libs/*.jar` is required. See the
+[contract update procedure](src/main/openapi/README.md) before changing the
+provider API. Do not commit generated Java or client binaries.
 
-## Project Structure
+See [bounded place-name search](docs/LOCATION_SEARCH.md) for the provider/public
+contracts, validation, privacy, deterministic test approach and residual
+coverage limitations.
 
-```
-location-gateway/
-├── src/
-│   ├── main/
-│   │   ├── java/com/jobseekercopilot/locationgateway/
-│   │   │   ├── LocationGatewayApplication.java
-│   │   │   ├── client/
-│   │   │   │   └── PostcodeIoClient.java
-│   │   │   ├── controller/
-│   │   │   │   └── LocationController.java
-│   │   │   ├── model/
-│   │   │   │   ├── Location.java
-│   │   │   │   └── LocationResponse.java
-│   │   │   └── service/
-│   │   │       └── LocationService.java
-│   │   └── resources/
-│   │       └── application.properties
-│   └── test/
-│       └── java/com/jobseekercopilot/locationgateway/
-│           ├── LocationControllerIntegrationTest.java
-│           └── service/
-│               └── LocationServiceTest.java
-├── pom.xml
-├── Dockerfile
-└── README.md
-```
+Successful lookups use a bounded in-memory cache keyed only by the canonical
+postcode/outcode. Direct callers have a bounded fixed-window capacity limit;
+`429` includes `Retry-After`. Provider latency/outcome, retry, circuit, cache,
+and rate metrics never contain postcode or caller labels. See
+[location controls](docs/LOCATION_CONTROLS.md) for privacy, tuning, beta alert
+thresholds, trusted-proxy constraints, and residual per-instance limitations.
 
-## Testing
+The generated client uses explicit connect/read deadlines. Only transient HTTP
+responses receive one bounded retry; transport timeouts are not retried. A
+per-instance circuit rejects during an observed outage and contributes safe
+readiness state. See the [downstream resilience policy](docs/DOWNSTREAM_RESILIENCE.md)
+for budgets, error behavior, tuning, tests, ownership, and residual risk.
 
-The project includes both unit and integration tests:
+## Branch workflow and troubleshooting
 
-- **LocationServiceTest**: Unit tests for the location service layer
-- **LocationControllerIntegrationTest**: Integration tests for the REST API endpoints
+Use `feature/* → develop`; `main` is not used for application delivery. Postcode values are
+redacted from request-path logs, and error responses do not echo input or
+downstream response details. Use the correlation ID to join gateway logs. For
+client-generation failures, validate the checked-in contract and rerun
+`mvn -B clean verify`.
 
-Run tests with:
-```bash
-mvn test
-```
+## Licence
 
-## Docker
+Copyright © 2026 Bernard McGeever. All rights reserved.
 
-A Dockerfile is included for containerized deployment.
-
-```bash
-# Build Docker image
-docker build -t location-gateway .
-
-# Run container
-docker run -p 8080:8080 location-gateway
-```
-
-## API Response Format
-
-All API responses follow a consistent structure:
-
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Description of the result",
-  "data": [...]
-}
-```
-
-- `status`: HTTP status code
-- `success`: Boolean indicating success/failure
-- `message`: Human-readable message
-- `data`: Response payload (array or object)
-
-## Error Handling
-
-The API returns appropriate HTTP status codes and error messages:
-
-- `400 Bad Request`: Missing or invalid parameters
-- `500 Internal Server Error`: Server-side errors
-
-## License
-
-This project is part of the Job Seeker Copilot suite.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## Repository
-
-https://github.com/mcgeeverbernard1992/location-gateway
+This repository contains proprietary software belonging to Bernard McGeever.
+It may not be used, copied, modified or distributed without express written
+permission. See [LICENSE](./LICENSE).

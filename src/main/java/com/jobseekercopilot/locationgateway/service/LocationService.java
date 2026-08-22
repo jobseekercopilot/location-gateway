@@ -1,77 +1,135 @@
 package com.jobseekercopilot.locationgateway.service;
 
-import com.jobseekercopilot.locationgateway.client.PostcodeIoClient;
+import com.jobseekercopilot.locationgateway.client.PostcodeGatewayCircuitOpenException;
+import com.jobseekercopilot.locationgateway.client.ResilientPostcodeGatewayClient;
+import com.jobseekercopilot.locationgateway.cache.LocationLookupCache;
+import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
-
-import jakarta.annotation.PostConstruct;
-import java.util.ArrayList;
+import com.jobseekercopilot.locationgateway.validation.PostcodeValidator;
+import com.jobseekercopilot.locationgateway.validation.PlaceSearchValidator;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.function.Supplier;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Service
+@RequiredArgsConstructor
 public class LocationService {
-    
-    @Autowired
-    private PostcodeIoClient postcodeIoClient;
-    
-    private List<Location> locationCatalog;
 
-    @PostConstruct
-    public void init() {
-        locationCatalog = new ArrayList<>();
-        locationCatalog.add(new Location("loc-1", "Leeds, West Yorkshire", "LS1", "Yorkshire and the Humber"));
-        locationCatalog.add(new Location("loc-2", "Manchester, Greater Manchester", "M1", "North West"));
-        locationCatalog.add(new Location("loc-3", "Birmingham, West Midlands", "B1", "West Midlands"));
-        locationCatalog.add(new Location("loc-4", "London Central, Greater London", "EC1A", "London"));
-        locationCatalog.add(new Location("loc-5", "London Enfield, Greater London", "EN1", "London"));
-        locationCatalog.add(new Location("loc-6", "London Westminster, Greater London", "SW1A", "London"));
-        locationCatalog.add(new Location("loc-7", "Glasgow City Centre, Scotland", "G1", "Scotland"));
-        locationCatalog.add(new Location("loc-8", "Edinburgh, Midlothian", "EH1", "Scotland"));
-        locationCatalog.add(new Location("loc-9", "Bristol City Centre, Bristol", "BS1", "South West"));
-        locationCatalog.add(new Location("loc-10", "Sheffield, South Yorkshire", "S1", "Yorkshire and the Humber"));
-        locationCatalog.add(new Location("loc-11", "Cardiff City Centre, Wales", "CF10", "Wales"));
-        locationCatalog.add(new Location("loc-12", "Newcastle-upon-Tyne, Tyne and Wear", "NE1", "North East"));
-        locationCatalog.add(new Location("loc-13", "Liverpool, Merseyside", "L1", "North West"));
-        locationCatalog.add(new Location("loc-14", "Belfast City Centre, Northern Ireland", "BT1", "Northern Ireland"));
-        locationCatalog.add(new Location("loc-15", "Wakefield, West Yorkshire", "WF1", "Yorkshire and the Humber"));
-        locationCatalog.add(new Location("loc-16", "York, North Yorkshire", "YO1", "Yorkshire and the Humber"));
-        locationCatalog.add(new Location("loc-17", "Leicester, East Midlands", "LE1", "East Midlands"));
-        locationCatalog.add(new Location("loc-18", "Coventry, West Midlands", "CV1", "West Midlands"));
-        locationCatalog.add(new Location("loc-19", "Nottingham, East Midlands", "NG1", "East Midlands"));
-        locationCatalog.add(new Location("loc-20", "Southampton, Hampshire", "SO14", "South East"));
-    }
-    
+    private static final Logger log = LoggerFactory.getLogger(LocationService.class);
+
+    private final ResilientPostcodeGatewayClient postcodeGatewayClient;
+    private final LocationLookupCache locationLookupCache;
+
     public List<Location> searchLocations(String query) {
-        if (query == null || query.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        String lowerQuery = query.toLowerCase();
-        
-        return locationCatalog.stream()
-                .filter(loc -> loc.getName().toLowerCase().contains(lowerQuery) ||
-                               loc.getPostcode().toLowerCase().contains(lowerQuery) ||
-                               loc.getRegion().toLowerCase().contains(lowerQuery))
-                .limit(10)
-                .collect(Collectors.toList());
+        String cleanQuery = PlaceSearchValidator.canonicalise(query);
+        long startedAt = System.nanoTime();
+        log.info("Location place search started");
+        var results = providerCall(() -> postcodeGatewayClient.searchPlaces(
+                cleanQuery, PlaceSearchValidator.RESULT_LIMIT));
+        List<Location> locations = results.stream()
+                .map(result -> new Location(
+                        result.getId(),
+                        result.getName(),
+                        result.getPostcode(),
+                        result.getRegion(),
+                        result.getLatitude(),
+                        result.getLongitude()))
+                .toList();
+        log.info("Location place search completed resultCount={} durationMs={}",
+                locations.size(), (System.nanoTime() - startedAt) / 1_000_000);
+        return locations;
     }
-    
-    public Mono<Location> getLocationFromPostcodeIo(String postcode) {
-        return postcodeIoClient.getPostcodeDetails(postcode)
-                .map(result -> {
-                    String region = result.getRegion();
-                    String adminDistrict = result.getAdminDistrict();
-                    String formattedName = (adminDistrict != null ? adminDistrict : "") 
-                            + (region != null && !region.trim().isEmpty() ? ", " + region : "");
-                    return new Location(
-                        "external-" + postcode,
-                        formattedName,
-                        postcode,
-                        region
-                    );
-                });
+
+    public Location getLocationFromPostcodeIo(String postcode) {
+        String canonicalPostcode = PostcodeValidator.canonicalise(postcode);
+        long startedAt = System.nanoTime();
+        log.info("Location lookup started");
+        var cached = locationLookupCache.get(canonicalPostcode);
+        if (cached.isPresent()) {
+            log.info("Location lookup completed cacheHit=true durationMs={}",
+                    (System.nanoTime() - startedAt) / 1_000_000);
+            return cached.get();
+        }
+        var result = lookup(canonicalPostcode);
+
+        String region = result.getRegion();
+        String adminDistrict = result.getAdminDistrict();
+
+        String formattedName =
+            (adminDistrict != null ? adminDistrict : "")
+            + (region != null && !region.isBlank() ? ", " + region : "");
+
+        String responsePostcode = result.getPostcode() == null || result.getPostcode().isBlank()
+                ? canonicalPostcode
+                : result.getPostcode();
+        Location location = new Location(
+            responsePostcode,
+            formattedName,
+            responsePostcode,
+            region,
+            result.getLatitude(),
+            result.getLongitude()
+        );
+        locationLookupCache.put(canonicalPostcode, location);
+        log.info("Location lookup completed cacheHit=false regionPresent={} adminDistrictPresent={} durationMs={}",
+                region != null && !region.isBlank(),
+                adminDistrict != null && !adminDistrict.isBlank(),
+                (System.nanoTime() - startedAt) / 1_000_000);
+        return location;
+    }
+
+    private com.jobseekercopilot.generated.postcodeiogateway.model.PostcodeLocation lookup(String postcode) {
+        return providerCall(() -> postcodeGatewayClient.lookup(postcode));
+    }
+
+    private <T> T providerCall(Supplier<T> call) {
+        try {
+            return call.get();
+        } catch (PostcodeGatewayCircuitOpenException exception) {
+            throw new LocationLookupException(HttpStatus.SERVICE_UNAVAILABLE, exception);
+        } catch (RestClientResponseException exception) {
+            throw new LocationLookupException(mapStatus(exception.getStatusCode().value()), exception);
+        } catch (ResourceAccessException exception) {
+            throw new LocationLookupException(
+                    hasTimeoutCause(exception) ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.SERVICE_UNAVAILABLE,
+                    exception);
+        } catch (RestClientException exception) {
+            throw new LocationLookupException(HttpStatus.BAD_GATEWAY, exception);
+        }
+    }
+
+    private HttpStatus mapStatus(int upstreamStatus) {
+        return switch (upstreamStatus) {
+            case 400 -> HttpStatus.BAD_REQUEST;
+            case 404 -> HttpStatus.NOT_FOUND;
+            case 422 -> HttpStatus.UNPROCESSABLE_ENTITY;
+            case 408, 504 -> HttpStatus.GATEWAY_TIMEOUT;
+            case 429 -> HttpStatus.TOO_MANY_REQUESTS;
+            case 503 -> HttpStatus.SERVICE_UNAVAILABLE;
+            case 502 -> HttpStatus.BAD_GATEWAY;
+            default -> HttpStatus.BAD_GATEWAY;
+        };
+    }
+
+    private boolean hasTimeoutCause(Throwable failure) {
+        Throwable current = failure;
+        for (int depth = 0; current != null && depth < 10; depth++) {
+            String type = current.getClass().getSimpleName();
+            if (current instanceof java.net.SocketTimeoutException
+                    || current instanceof java.util.concurrent.TimeoutException
+                    || type.contains("ReadTimeout")
+                    || type.contains("TimeoutException")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

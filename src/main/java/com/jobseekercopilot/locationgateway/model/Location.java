@@ -14,4 +14,6 @@ public class Location {
     private String name;
     private String postcode;
     private String region;
+    private Double latitude;
+    private Double longitude;
 }

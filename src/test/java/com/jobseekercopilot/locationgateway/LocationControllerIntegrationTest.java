@@ -1,93 +1,197 @@
 package com.jobseekercopilot.locationgateway;
 
 import com.jobseekercopilot.locationgateway.controller.LocationController;
+import com.jobseekercopilot.locationgateway.exception.InvalidPostcodeException;
+import com.jobseekercopilot.locationgateway.exception.InvalidPlaceSearchException;
+import com.jobseekercopilot.locationgateway.exception.LocationLookupException;
 import com.jobseekercopilot.locationgateway.model.Location;
+import com.jobseekercopilot.locationgateway.ratelimit.CallerRateLimiter;
+import com.jobseekercopilot.locationgateway.ratelimit.LocationRateLimitException;
 import com.jobseekercopilot.locationgateway.service.LocationService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.RestClientException;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-import reactor.core.publisher.Mono;
 
-import java.util.List;
-
-import static org.hamcrest.Matchers.*;
-import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(LocationController.class)
-public class LocationControllerIntegrationTest {
+@WebMvcTest(value = LocationController.class, properties = "debug=true")
+@ExtendWith(OutputCaptureExtension.class)
+class LocationControllerIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private LocationService locationService;
 
-    @Test
-    public void testSearchLocations_success() throws Exception {
-        Location mockLoc = new Location("loc-1", "Leeds, West Yorkshire", "LS1", "Yorkshire and the Humber");
-        when(locationService.searchLocations("Leeds")).thenReturn(List.of(mockLoc));
+    @MockitoBean
+    private CallerRateLimiter callerRateLimiter;
 
-        mockMvc.perform(get("/api/locations")
-                .param("q", "Leeds")
-                .contentType(MediaType.APPLICATION_JSON))
+    @Test
+    void searchesLocationsAndReturnsStableEmptySuccess(CapturedOutput output) throws Exception {
+        Location leeds = new Location("place-1", "Leeds", "LS1",
+                "Yorkshire and The Humber", 53.8008, -1.5491);
+        when(locationService.searchLocations("Leeds")).thenReturn(java.util.List.of(leeds));
+
+        mockMvc.perform(get("/api/locations").queryParam("q", "Leeds")
+                        .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.statusCode").value(200))
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Retrieved 1 matching UK location."))
+                .andExpect(jsonPath("$.message").value("Locations retrieved."))
                 .andExpect(jsonPath("$.locations", hasSize(1)))
-                .andExpect(jsonPath("$.locations[0].id").value("loc-1"))
-                .andExpect(jsonPath("$.locations[0].name").value("Leeds, West Yorkshire"));
+                .andExpect(jsonPath("$.locations[0].id").value("place-1"))
+                .andExpect(jsonPath("$.locations[0].postcode").value("LS1"));
+
+        when(locationService.searchLocations("Nowhere")).thenReturn(java.util.List.of());
+        mockMvc.perform(get("/api/locations").queryParam("q", "Nowhere")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("No matching locations."))
+                .andExpect(jsonPath("$.locations", hasSize(0)));
+
+        org.assertj.core.api.Assertions.assertThat(output)
+                .doesNotContain("q=Leeds")
+                .doesNotContain("q=Nowhere");
     }
 
     @Test
-    public void testSearchLocations_missingQuery() throws Exception {
-        mockMvc.perform(get("/api/locations")
-                .param("q", "")
-                .contentType(MediaType.APPLICATION_JSON))
+    void invalidPlaceSearchReturnsStableRedacted400() throws Exception {
+        String unsafe = "SECRET?limit=100";
+        when(locationService.searchLocations(unsafe)).thenThrow(new InvalidPlaceSearchException());
+
+        mockMvc.perform(get("/api/locations").queryParam("q", unsafe)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.statusCode").value(400))
+                .andExpect(jsonPath("$.message").value("Invalid place search query."))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString(unsafe))));
+
+        when(locationService.searchLocations(""))
+                .thenThrow(new InvalidPlaceSearchException());
+        mockMvc.perform(get("/api/locations").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid place search query."));
+    }
+
+    @Test
+    void testGetLocationByPostcode_success() throws Exception {
+
+        Location mockLocation = new Location(
+                "LS1",
+                "Leeds, Yorkshire and the Humber",
+                "LS1",
+                "Yorkshire and the Humber",
+                53.8008,
+                -1.5491
+        );
+
+        when(locationService.getLocationFromPostcodeIo("LS1"))
+                .thenReturn(mockLocation);
+
+        mockMvc.perform(get("/api/postcodes/LS1")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.statusCode").value(200))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message")
+                        .value("Location retrieved."))
+                .andExpect(jsonPath("$.locations", hasSize(1)))
+                .andExpect(jsonPath("$.locations[0].id")
+                        .value("LS1"));
+    }
+
+    @Test
+    void invalidPostcodeReturnsStableBadRequestWithoutEchoingInput() throws Exception {
+
+        when(locationService.getLocationFromPostcodeIo("INVALID"))
+                .thenThrow(new InvalidPostcodeException());
+
+        mockMvc.perform(get("/api/postcodes/INVALID")
+                        .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.statusCode").value(400))
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Missing search query parameter. 'q' must be provided."));
+                .andExpect(jsonPath("$.message").value("Invalid postcode or outcode."))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("INVALID"))))
+                .andExpect(jsonPath("$.locations", hasSize(0)));
     }
 
     @Test
-    public void testGetLocationByPostcode_success() throws Exception {
-        Location mockLoc = new Location("external-LS1", "Leeds, Yorkshire and the Humber", "LS1", "Yorkshire and the Humber");
-        when(locationService.getLocationFromPostcodeIo("LS1")).thenReturn(Mono.just(mockLoc));
+    void providerStatusIsReturnedWithStableMessageWithoutLeakingCause() throws Exception {
+        when(locationService.getLocationFromPostcodeIo("SW1A1AA"))
+                .thenThrow(new LocationLookupException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        new RestClientException("secret downstream body for SW1A1AA")
+                ));
 
-        MvcResult mvcResult = mockMvc.perform(get("/api/postcodes/LS1")
-                .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(request().asyncStarted())
-                .andReturn();
-
-        mockMvc.perform(asyncDispatch(mvcResult))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.statusCode").value(200))
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Retrieved location for postcode LS1."))
-                .andExpect(jsonPath("$.locations", hasSize(1)))
-                .andExpect(jsonPath("$.locations[0].id").value("external-LS1"));
+        mockMvc.perform(get("/api/postcodes/SW1A1AA")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.statusCode").value(503))
+                .andExpect(jsonPath("$.message").value("Location service is temporarily unavailable."))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("secret downstream body"))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("SW1A1AA"))));
     }
 
     @Test
-    public void testGetLocationByPostcode_error() throws Exception {
-        when(locationService.getLocationFromPostcodeIo("INVALID")).thenReturn(Mono.error(new RuntimeException("Postcode not found")));
+    void unsupportedPostcodeCoverageIsExplicitAndDoesNotEchoThePostcode() throws Exception {
+        when(locationService.getLocationFromPostcodeIo("BT11AA"))
+                .thenThrow(new LocationLookupException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        new RestClientException("private provider detail for BT11AA")
+                ));
 
-        MvcResult mvcResult = mockMvc.perform(get("/api/postcodes/INVALID")
-                .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(request().asyncStarted())
-                .andReturn();
-
-        mockMvc.perform(asyncDispatch(mvcResult))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.statusCode").value(500))
+        mockMvc.perform(get("/api/postcodes/BT11AA")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.statusCode").value(422))
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Error retrieving location for postcode INVALID: Postcode not found"));
+                .andExpect(jsonPath("$.message")
+                        .value("This postcode area is not currently supported."))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("BT11AA"))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("private provider detail"))));
+    }
+
+    @Test
+    void unacceptableResponseContentTypeReturnsStableJsonError() throws Exception {
+        mockMvc.perform(get("/api/postcodes/LS1")
+                        .accept(MediaType.TEXT_PLAIN))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void callerRateLimitReturnsStableRetryableResponseWithoutCallingService() throws Exception {
+        doThrow(new LocationRateLimitException(42))
+                .when(callerRateLimiter).check(org.mockito.ArgumentMatchers.anyString());
+
+        mockMvc.perform(get("/api/postcodes/LS1").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "42"))
+                .andExpect(jsonPath("$.statusCode").value(429))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Too many location requests. Try again later."))
+                .andExpect(jsonPath("$.locations", hasSize(0)));
+
+        verifyNoInteractions(locationService);
     }
 }
