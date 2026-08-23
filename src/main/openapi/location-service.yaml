@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Job Seeker Copilot Location Service Internal API
-  version: 1.1.0
+  version: 1.2.0
   description: Provider-neutral internal location normalisation and transient commute routing.
 servers:
   - url: http://location-service:8104
@@ -221,7 +221,7 @@ components:
         provider:
           type: string
           nullable: true
-          enum: [GOOGLE_MAPS]
+          enum: [GOOGLE_MAPS, POSTCODES_IO]
     ResolveRequest:
       type: object
       required: [sessionId, suggestionId]
