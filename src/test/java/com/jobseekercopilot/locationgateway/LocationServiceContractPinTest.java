@@ -17,10 +17,13 @@ class LocationServiceContractPinTest {
         String pin = Files.readString(Path.of("src/main/openapi/location-service.pin.json"));
 
         assertThat(checksum)
-                .isEqualTo("cd74fbf278c710a2782bbbe6473f9f708a19b6dd9329f42927ce302bb53f5f6b");
+                .isEqualTo("0cd7a877836dfbf1a42b5f71e0a807ec8dc99f88d69a695d7c5734e320cdef27");
+        assertThat(new String(contract, java.nio.charset.StandardCharsets.UTF_8))
+                .contains("version: 1.2.0")
+                .contains("enum: [GOOGLE_MAPS, POSTCODES_IO]");
         assertThat(pin)
-                .contains("\"contractVersion\": \"1.1.0\"")
-                .contains("\"sourceRevision\": \"91857140c71bfda8b807c535272f918fe7741263\"")
+                .contains("\"contractVersion\": \"1.2.0\"")
+                .contains("\"sourceRevision\": \"3819dc5491ecf8ee95fe86d646311588c5e24d55\"")
                 .contains("\"sha256\": \"" + checksum + "\"")
                 .contains("\"generatorVersion\": \"7.24.0\"");
     }
